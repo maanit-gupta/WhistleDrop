@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// PRIVACY: Report and StatusUpdate must never hold data that could identify a
+// reporter (no IP, session ID, device fingerprint, email, user agent, etc.).
+
+enum ReportCategory {
+  SECURITY
+  HARASSMENT
+  CORRUPTION
+  TECHNICAL
+  OTHER
+}
+
+enum ReportStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+  /// Terminal and read-only; evidence files are purged on entry.
+  CLOSED
+}
+
+enum NoteVisibility {
+  /// Shown to the reporter through the case-code lookup.
+  PUBLIC
+  /// Moderators only.
+  INTERNAL
+}
+
+enum ModeratorRole {
+  ADMIN
+  MODERATOR
+}
+
+model Report {
+  /// Internal only — never expose to reporters; they use caseCode.
+  id            String         @id @default(cuid())
+  /// Unique constraint also creates the lookup index.
+  caseCode      String         @unique
+  category      ReportCategory
+  /// Length (20–5000) is validated at the API layer.
+  description   String
+  evidenceUrl   String?
+  status        ReportStatus   @default(SUBMITTED)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  /// Set when the report moves to CLOSED.
+  closedAt      DateTime?
+  statusUpdates StatusUpdate[]
+  attachments   Attachment[]
+}
+
+model StatusUpdate {
+  id          String         @id @default(cuid())
+  reportId    String
+  report      Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  note        String?
+  visibility  NoteVisibility @default(PUBLIC)
+  newStatus   ReportStatus
+  /// Acting moderator. Optional only so rows written before the audit trail
+  /// existed stay valid; every new update sets it. Restrict: moderators with
+  /// history are deactivated, never deleted, so the trail can't be erased.
+  moderatorId String?
+  moderator   Moderator?     @relation(fields: [moderatorId], references: [id], onDelete: Restrict)
+  createdAt   DateTime       @default(now())
+
+  @@index([reportId])
+  @@index([moderatorId])
+}
+
+model Moderator {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  role          ModeratorRole  @default(MODERATOR)
+  /// Checked on every authenticated request, so deactivation is immediate.
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  statusUpdates StatusUpdate[]
+}
+
+/// Evidence file in the private Supabase Storage bucket. Only files that passed
+/// type/size checks (and, for images, metadata stripping) get a row.
+model Attachment {
+  id          String   @id @default(cuid())
+  reportId    String
+  report      Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  /// Object path inside the bucket: reports/<reportId>/<attachmentId>.<ext>
+  storagePath String   @unique
+  mimeType    String
+  sizeBytes   Int
+  createdAt   DateTime @default(now())
+
+  @@index([reportId])
+}
+
+/// Upload tokens already used in a submission, so a token can't attach the same
+/// file twice. Holds only the token's random id: nothing about the uploader.
+model ConsumedUploadToken {
+  jti        String   @id
+  consumedAt DateTime @default(now())
+}
