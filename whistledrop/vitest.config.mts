@@ -19,6 +19,8 @@ const alias = {
 };
 const JWT_SECRET = "test-secret-that-is-at-least-32-characters-long";
 const IP_HASH_SECRET = "test-ip-hash-secret-at-least-32-characters";
+const CRON_SECRET = "test-cron-secret-that-is-at-least-32-chars";
+const E2E_PORT = 3481;
 
 // Integration tests only ever talk to this disposable database (see
 // compose.test.yml and tests/integration/globalSetup.ts), never Supabase.
@@ -52,11 +54,24 @@ export default defineConfig({
           env: {
             JWT_SECRET,
             IP_HASH_SECRET,
+            CRON_SECRET,
             TEST_DATABASE_URL,
             // Point the app's Prisma client (lib/db.ts) at the test database.
             DATABASE_URL: TEST_DATABASE_URL,
             DIRECT_URL: TEST_DATABASE_URL,
           },
+        },
+      },
+      {
+        resolve: { alias },
+        test: {
+          name: "e2e",
+          environment: "node",
+          include: ["tests/e2e/**/*.e2e.test.ts"],
+          // Starts the production build (`next start`); run `next build` first
+          // (npm run test:e2e does both).
+          globalSetup: ["tests/e2e/globalSetup.ts"],
+          env: { E2E_BASE_URL: `http://127.0.0.1:${E2E_PORT}`, E2E_PORT: String(E2E_PORT) },
         },
       },
     ],

@@ -63,10 +63,13 @@ Fill in `.env.local` (git-ignored).
 | `SUPABASE_URL` | App at runtime and build | Project URL, e.g. `https://<ref>.supabase.co`. Also allowed in the CSP's `connect-src` so browsers can upload to Storage. |
 | `SUPABASE_SERVICE_ROLE_KEY` | App at runtime (server only) | Service role (or `sb_secret_…`) key. Only `lib/storage.ts` reads it, and that module is `server-only`. **Never** give it a `NEXT_PUBLIC_` prefix. |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | App at runtime | Upstash Redis REST credentials (`KV_REST_API_URL` / `KV_REST_API_TOKEN` from the Vercel integration also work). Required in production. |
+| `CRON_SECRET` | App at runtime | Bearer secret for `GET /api/cron/cleanup`. At least 32 characters. Vercel Cron sends it automatically when it's set in the project. |
 | `SEED_MODERATOR_EMAIL`, `SEED_MODERATOR_PASSWORD` | Seed script only | The initial **ADMIN** account. |
 | `TEST_DATABASE_URL` | Integration tests only (optional) | Overrides the default local Docker test database. |
 
-The `db:*` and `storage:*` scripts load `.env.local` explicitly (via `dotenv-cli`), because the Prisma CLI only reads `.env` on its own.
+The `db:*`, `storage:*` and `env:*` scripts load `.env.local` explicitly (via `dotenv-cli`), because the Prisma CLI only reads `.env` on its own.
+
+All server variables are validated in one place, `lib/env.ts`: each value is checked where it's used, and the error names the variable. Run `npm run env:check` to validate the whole environment at once (for example in CI, or against production values before a deploy).
 
 ### 3. Create the schema, the storage bucket and the first admin
 
@@ -84,7 +87,7 @@ To change the schema, edit `prisma/schema.prisma` and create a **new** migration
 npm run dev          # http://localhost:3000, docs at http://localhost:3000/api-docs
 ```
 
-Without Upstash credentials, `npm run dev` uses an in-memory rate limiter and logs a warning. A production build refuses to serve rate-limited routes (500) until Upstash is configured.
+Without Upstash credentials, `npm run dev` uses an in-memory rate limiter and logs a warning. A production server answers rate-limited routes with `503 RATE_LIMITER_UNAVAILABLE` until Upstash is configured.
 
 ## Testing
 
@@ -94,6 +97,8 @@ Without Upstash credentials, `npm run dev` uses an in-memory rate limiter and lo
 | `npm run test:db:up` | Starts the disposable test Postgres (`compose.test.yml`, port 54329, data kept in memory). |
 | `npm run test:integration` | Integration tests (`tests/integration/`) against that database: real Prisma, real migrations, real transactions and row locks. Supabase Storage is replaced by an in-memory fake (`tests/helpers/fakeStorage.ts`); image sanitizing runs the real `sharp`. |
 | `npm run test:db:down` | Stops and discards the test database. |
+| `npm run test:e2e` | Builds the app and runs `tests/e2e/` against `next start`: checks the page CSP nonce on Next's real rendered HTML, and that API routes and `/api-docs` keep their fixed policies. No database needed. |
+| `npm run test:all` | All three suites (needs the test database running). |
 
 The integration tests never touch Supabase. They refuse to start unless `TEST_DATABASE_URL` is a **local** host with a database name ending in `_test`. Before each test they truncate the tables, and they check the database name again first. The comment in `tests/integration/globalSetup.ts` explains why this approach was chosen over wrapping each test in a rolled-back transaction.
 
@@ -124,6 +129,7 @@ Moderator and admin routes need `Authorization: Bearer <token>`; the token comes
 | `PATCH` | `/api/admin/moderators/:id` | Bearer (ADMIN) | Body: `{ role?, isActive? }` (at least one) | `200` `{ id, email, role, isActive, createdAt }` | `400` · `401` · `403` `FORBIDDEN`, `CANNOT_MODIFY_SELF` · `404` · `409` `LAST_ADMIN` · `500` |
 | `GET` | `/api/openapi` | None | – | `200` OpenAPI 3.1 document | – |
 | `GET` | `/api-docs` | None | – | Swagger UI (HTML) | – |
+| `GET` | `/api/cron/cleanup` | Bearer `CRON_SECRET` | – | `200` `{ deletedStagingObjects, deletedConsumedUploadTokens }` | `401` · `500` |
 
 ### Field rules
 
@@ -211,6 +217,7 @@ Example: `/api/mod/reports?q=procurement&status=SUBMITTED,UNDER_REVIEW&from=2026
 | 409 | `LAST_ADMIN` | The change would leave no active ADMIN (only reachable when two admins demote or deactivate each other at the same moment). |
 | 423 | `REPORT_CLOSED` | The report is CLOSED and read-only: no further status changes or notes. |
 | 429 | `RATE_LIMITED` | Too many requests from this client. The `Retry-After` header gives the wait in seconds. |
+| 503 | `RATE_LIMITER_UNAVAILABLE` | A rate-limited route was called on a production server with no Upstash credentials configured. |
 | 500 | `INTERNAL_ERROR` | Unexpected failure. Always the generic message `Something went wrong`; details are logged on the server only, never returned. |
 
 ### Rate limits
@@ -277,7 +284,8 @@ Browser                          WhistleDrop API                         Supabas
 ```
 
 - **All or nothing:** if any attachment fails (bad token, wrong type, storage error, database error), the files already stored for this submission are deleted and no report, attachment or token record is kept. The staged uploads are left in place, so the reporter can fix the problem and resubmit with the same tokens (until they expire).
-- **Single use:** each token's id is recorded in `ConsumedUploadToken` in the same transaction as the report. Reusing a token returns `409 UPLOAD_TOKEN_USED`; if two submissions race with the same token, the primary key lets only one commit, and the loser's files are removed.
+- **Single use:** each token's id is recorded in `ConsumedUploadToken` in the same transaction as the report. Reusing a token returns `409 UPLOAD_TOKEN_USED`; if two submissions race with the same token, the primary key lets only one commit, and the loser's files are removed. The table has only two columns, `jti` (the token's random id) and `consumedAt`: nothing links a row to a report or to the person who uploaded.
+- **Daily cleanup:** `GET /api/cron/cleanup`, scheduled by Vercel Cron in `vercel.json` (03:00 UTC daily) and protected by `CRON_SECRET`, deletes staged uploads older than 1 hour (their tokens expired after 30 minutes, so they can never be attached) and `ConsumedUploadToken` rows older than the 30-minute token lifetime (an expired token is rejected before its record is ever checked).
 - **Downloads:** moderators get a signed URL that **expires after 60 seconds** from `GET /api/mod/reports/:id/attachments/:attachmentId`. The bucket is private; no public URLs exist.
 - **Two layers of limits:** Storage itself also enforces the 10 MB limit and the type allowlist (set by `npm run storage:setup`).
 
@@ -304,7 +312,7 @@ await fetch(uploadUrl, { method: "PUT", headers: { "content-type": file.type }, 
 - The JWT carries the role for convenience, but **authorization always uses the database**: every authenticated request re-reads the account, so deactivation and demotion take effect on the very next request, not when the 12-hour token expires.
 - An admin can't demote or deactivate themselves (`403 CANNOT_MODIFY_SELF`).
 - There is always at least one active admin. Role and active changes lock the active-admin rows, so even two admins demoting each other at the same moment can't leave zero (`409 LAST_ADMIN`).
-- Moderators are deactivated, never deleted. The database refuses to delete a moderator who has written status updates, so the audit trail can't be erased.
+- **Moderators with history can only be deactivated, never deleted. This is intentional**, to protect the audit trail: the foreign key from `StatusUpdate.moderatorId` uses `ON DELETE RESTRICT`, so the database refuses to delete a moderator who has written status updates, even outside the API. Deactivating (`isActive: false`) blocks the account immediately while keeping who-did-what intact. There is no delete endpoint.
 
 ## How anonymity is maintained
 
@@ -318,7 +326,9 @@ await fetch(uploadUrl, { method: "PUT", headers: { "content-type": file.type }, 
 | `ConsumedUploadToken` | `jti` (random token id), `consumedAt` |
 | `Moderator` | `id`, `email`, `passwordHash`, `role`, `isActive`, `createdAt` |
 
-Storage holds the sanitized evidence files under `reports/<reportId>/` until the report is closed, plus staged uploads under `staging/` (see [Known limitations](#known-limitations)).
+`ConsumedUploadToken` has no `reportId` and no other column linking a row to a report or a requester; rows are purged daily once older than the token lifetime.
+
+Storage holds the sanitized evidence files under `reports/<reportId>/` until the report is closed, plus staged uploads under `staging/`, which are deleted by the daily cleanup once older than 1 hour.
 
 ### What is never stored
 
@@ -341,8 +351,14 @@ Storage holds the sanitized evidence files under `reports/<reportId>/` until the
 - **Supabase only ever sees the app server connecting to the database.** Row-level security is enabled with no policies on every table, so Supabase's public Data API (anon key) can't read or write anything.
 - **Security headers on every route** (set in `next.config.ts`):
   - `Referrer-Policy: no-referrer`: links out of WhistleDrop don't reveal which page the user came from.
-  - A strict `Content-Security-Policy`: same-origin scripts, styles, fonts and connections only (plus the Supabase origin for uploads), no inline scripts, no `eval` in production, no plugins, no framing. `/api-docs` is the only exception, and it only adds `'unsafe-inline'` styles and `data:` images, which Swagger UI needs; its scripts remain same-origin.
+  - A strict `Content-Security-Policy`, one per path:
+    - **Pages** (set per request by `proxy.ts`): scripts only with this request's nonce (`'nonce-…' 'strict-dynamic'`), no inline or `eval` scripts in production, styles `'self' 'unsafe-inline'` (see [rule 5](#project-rules-for-ui-work)), same-origin fonts and images, connections only to our origin and the Supabase project, no plugins, no framing.
+    - **API routes** (`next.config.ts`): same-origin only, no inline scripts or styles.
+    - **`/api-docs`**: the API policy plus `'unsafe-inline'` styles and `data:` images, which Swagger UI needs; its scripts remain same-origin.
   - `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and no `X-Powered-By` header.
+- **The API docs make no third-party requests.** Swagger UI's assets are served from our own origin, and its default "validator" badge, which sends the spec's URL to `validator.swagger.io`, is turned off (`validatorUrl: null` in `public/api-docs/init.js`).
+- **No install-time telemetry.** `swagger-ui-dist` depends on `@scarf/scarf`, whose install script reports package downloads to Scarf. npm's `allowScripts` allowlist in `package.json` blocks it; it must stay unapproved.
+- **Server code stays out of browser bundles.** `lib/storage.ts`, `lib/guards.ts` and `lib/validation.ts` import `server-only`, so importing them at runtime from client code fails the build. Frontend code may only use `import type` from `lib/validation.ts` (see that file's header).
   - `Cache-Control: no-store` on every API response, so reports aren't kept in browser or proxy caches.
 
 ### What this app cannot protect
@@ -356,11 +372,17 @@ Storage holds the sanitized evidence files under `reports/<reportId>/` until the
 
 These apply now and to every page added later.
 
-1. **No third-party scripts.** Every script is served from our own origin; no CDNs, tag managers, chat widgets or embeds. (The CSP enforces this: `script-src 'self'`.)
+1. **No third-party scripts.** Every script is served from our own origin; no CDNs, tag managers, chat widgets or embeds. (The CSP enforces this: only scripts carrying the request's nonce, or loaded by one, can run.)
 2. **No Vercel Analytics, Speed Insights or any other analytics on reporter-facing pages.** Even aggregated analytics add network requests and fingerprinting surface on the pages where anonymity matters most.
 3. **Fonts only through `next/font`**, which self-hosts them at build time. Never link Google Fonts or any other font CDN (the CSP's `font-src 'self'` blocks them anyway).
 4. **Evidence URLs rendered as links** must use `rel="noopener noreferrer"` and `target="_blank"`, and must show a **"You're leaving WhistleDrop"** warning first, naming the destination domain and noting that the other site can see the visitor's IP address. Never auto-fetch, preview or unfurl an evidence URL.
-5. **Next.js pages and the CSP:** Next.js embeds small inline bootstrap scripts in every page it renders. The strict `script-src 'self'` policy set for all routes blocks them. Before building the UI, move the page CSP to per-request nonces in `proxy.ts`, the approach in the Next.js CSP guide (`node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`). Do this rather than adding `'unsafe-inline'`.
+5. **Pages use a per-request CSP nonce** (`proxy.ts`, following the Next.js CSP guide in `node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`):
+   - For every page request, `proxy.ts` generates a random nonce and sends `script-src 'self' 'nonce-<nonce>' 'strict-dynamic'` (plus `'unsafe-eval'` in development only, which React needs for error overlays). Next.js reads the nonce from the request's CSP header and adds it to all of its own scripts, including the inline bootstrap scripts; `'strict-dynamic'` lets those trusted scripts load their chunks. Anything else, such as an injected `<script>`, is blocked.
+   - Pages therefore **render dynamically, per request** (the root layout awaits `connection()`): a prerendered page would carry no nonce. Don't mark pages static or use ISR.
+   - If you ever need your own inline script or `next/script`, read the nonce from the `x-nonce` request header (`(await headers()).get("x-nonce")`) and pass it as the `nonce` prop. Never add `'unsafe-inline'` to `script-src`.
+   - **Tradeoff: `style-src 'self' 'unsafe-inline'`.** React renders `style` attributes, and the UI uses them for transforms and progress bars; nonces can't cover style attributes. This is accepted deliberately: inline styles can't run code, and scripts stay strict.
+   - `npm run test:e2e` checks that the header's nonce matches the nonce on every script Next.js renders.
+6. **Client code imports only types from `lib/validation.ts`** (`import type`). It is server-only (it carries the OpenAPI extension and server rules); a client component that needs runtime validation gets a separate `lib/validation.client.ts` with plain Zod schemas.
 
 ## Deployment (Vercel)
 
@@ -372,32 +394,34 @@ These apply now and to every page added later.
    | `DATABASE_URL` | Yes | Transaction pooler URL (port 6543, `?pgbouncer=true`). |
    | `JWT_SECRET` | Yes | Use a different value from local development. |
    | `IP_HASH_SECRET` | Yes | Use a different value from local development. |
-   | `SUPABASE_URL` | Yes | Also read at **build** time for the CSP, so set it for the build environment too. |
+   | `SUPABASE_URL` | Yes | Read at **build** time (API CSP) and at runtime (page CSP), so set it for both. |
    | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only secret. |
    | `UPSTASH_REDIS_REST_URL` | Yes | Or `KV_REST_API_URL` from the Vercel Upstash integration. |
    | `UPSTASH_REDIS_REST_TOKEN` | Yes | Or `KV_REST_API_TOKEN`. |
+   | `CRON_SECRET` | Yes | Vercel Cron sends it as `Authorization: Bearer …` to `/api/cron/cleanup`. |
    | `DIRECT_URL` | Only if migrations run on Vercel | Only Prisma Migrate uses it. |
 
    `SEED_MODERATOR_EMAIL` / `SEED_MODERATOR_PASSWORD` are **not** needed on Vercel; seeding is a one-off run from a trusted machine. `TEST_DATABASE_URL` is for local tests only.
 
 3. Deploy the functions in the same region as the database (this project's Supabase is in `ap-southeast-2`, so Vercel region `syd1`), and create the Upstash database in the same region. Every query is a network round trip, and a status change makes several in one transaction.
 
-`npm install` runs `prisma generate` and copies Swagger UI's assets through the `postinstall` hook, so both happen on Vercel automatically.
+`npm install` runs `prisma generate` and copies Swagger UI's assets through the `postinstall` hook, so both happen on Vercel automatically. The daily cleanup job is declared in `vercel.json` and registered by Vercel on deploy. Run `npm run env:check` against the production values before the first deploy.
 
 ## Known limitations
 
 These are deliberate tradeoffs, listed so nobody relies on something the code doesn't do.
 
 - **PDF metadata is not stripped.** PDFs are only checked for type and size; author, producer, creation tool, timestamps, and any embedded content or hidden text stay exactly as uploaded. Reporters should remove PDF metadata themselves, for example by printing to a new PDF or exporting it as images, before uploading.
-- **Upload staging files can be orphaned.** If a reporter uploads a file but never submits the report, the staged copy stays in `staging/` in the bucket. There is no automatic cleanup yet; a scheduled job should delete staging objects older than the 30-minute token lifetime.
-- **The rate limiter fails open when Redis is slow.** If Upstash doesn't answer within 3 seconds, the request is allowed, so an outage never stops people reporting. Errors other than timeouts (for example bad credentials) fail closed with a 500.
+- **Abandoned uploads linger for up to a day.** If a reporter uploads a file but never submits the report, the staged copy stays in `staging/` until the daily cleanup job deletes it (it removes staged files older than 1 hour, so worst case about 25 hours).
+- **The rate limiter fails open when Redis is slow.** If Upstash doesn't answer within 3 seconds, the request is allowed, so an outage never stops people reporting. Errors other than timeouts (for example bad credentials) fail closed with a 500; missing Upstash configuration in production returns 503.
 - **Rate-limit windows reset at UTC midnight.** Because the IP hash's salt rotates daily, a client's counts start fresh at 00:00 UTC.
 - **The rate limiter trusts `X-Forwarded-For`.** That's correct behind Vercel's proxy, which sets the header. If the app is exposed directly, clients can forge the header to dodge the limits.
 - **Shared IPs share limits.** Everyone behind one NAT (an office, a campus, a Tor exit node) shares a single budget, so heavy use by others can block a legitimate reporter for a while.
 - **Moderator tokens aren't revocable one by one.** Deactivation blocks a moderator immediately, but there is no "log out everywhere" for an active account short of rotating `JWT_SECRET`.
 - **Search is a plain substring scan** (`ILIKE '%…%'`). That's fine at this scale; a large dataset would need a `pg_trgm` index or full-text search.
 - **Case codes are fairly short.** About 41 bits of randomness is plenty against rate-limited online guessing, but weaker than a long random token if the limiter is bypassed (see `X-Forwarded-For` above).
-- **Next.js pages need nonce-based CSP** before any UI ships (see [rule 5](#project-rules-for-ui-work)).
+- **Pages can't be statically generated or cached at the edge**, because every page needs a fresh CSP nonce (see [rule 5](#project-rules-for-ui-work)). Each page view is rendered by a function.
+- **Page styles allow `'unsafe-inline'`** (see rule 5). An attacker who could inject HTML could restyle the page, but not run scripts.
 - **The package.json seed setting is deprecated.** Prisma warns about the `package.json#prisma.seed` config. It works on the pinned Prisma 6, and moves to `prisma.config.ts` when upgrading to Prisma 7.
 
 ## Project structure
@@ -415,7 +439,9 @@ app/
   api/admin/moderators/route.ts                          GET/POST list / create moderators
   api/admin/moderators/[id]/route.ts                     PATCH  role / isActive
   api/openapi/route.ts                                   GET    OpenAPI document
+  api/cron/cleanup/route.ts                              GET    daily cleanup (Vercel Cron, CRON_SECRET)
   api-docs/route.ts                                      GET    Swagger UI
+proxy.ts           per-request CSP nonce for pages
 lib/
   db.ts            Prisma client singleton
   caseCode.ts      case code generation (crypto.randomBytes)
@@ -428,16 +454,21 @@ lib/
   uploads.ts       magic-byte checks, sharp sanitizing, attachment storage with rollback
   storage.ts       server-only Supabase Storage client (service role)
   rateLimit.ts     Upstash sliding-window limiter, hashed-IP keys, in-memory test fallback
+  env.ts           validation of all server environment variables
+  csp.ts           Content-Security-Policy values (page nonce policy)
   apiResponse.ts   JSON success/error helpers
 prisma/
   schema.prisma, migrations/, seed.ts
 scripts/
   setup-storage.ts     creates the private evidence bucket
   copy-swagger-ui.mjs  copies Swagger UI assets into public/ on install
+  check-env.ts         npm run env:check
 public/api-docs/init.js   Swagger UI bootstrap (a file, so no inline script is needed)
 tests/
   *.test.ts                unit tests (mocked Prisma / Storage / Upstash)
   integration/             integration tests (Docker Postgres, fake Storage)
+  e2e/                     tests against `next start` (CSP nonces)
   helpers/                 fake Storage, server-only stub
 compose.test.yml           disposable test database
+vercel.json                daily cron schedule
 ```

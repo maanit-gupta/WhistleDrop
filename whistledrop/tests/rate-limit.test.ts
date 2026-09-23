@@ -88,7 +88,7 @@ describe("Upstash rate limiting", () => {
     expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/); // base64url SHA-256
   });
 
-  it("fails closed with a generic 500 if Upstash isn't configured in production, without logging the IP", async () => {
+  it("returns 503 RATE_LIMITER_UNAVAILABLE if Upstash isn't configured in production, without logging the IP", async () => {
     vi.resetModules();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "");
@@ -98,7 +98,22 @@ describe("Upstash rate limiting", () => {
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await checkRateLimit("lookup", request());
+    expect(res!.status).toBe(503);
+    expect(await res!.json()).toEqual({
+      error: { code: "RATE_LIMITER_UNAVAILABLE", message: "Service temporarily unavailable" },
+    });
+    expect(errorLog.mock.calls.flat().join(" ")).not.toContain(IP);
+    errorLog.mockRestore();
+  });
+
+  it("fails closed with a generic 500 when Upstash rejects the request", async () => {
+    const { checkRateLimit } = await loadWithUpstash();
+    upstash.limit.mockRejectedValue(new Error("WRONGPASS invalid token"));
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await checkRateLimit("submit", request());
     expect(res!.status).toBe(500);
+    expect((await res!.json()).error.code).toBe("INTERNAL_ERROR");
     expect(errorLog.mock.calls.flat().join(" ")).not.toContain(IP);
     errorLog.mockRestore();
   });

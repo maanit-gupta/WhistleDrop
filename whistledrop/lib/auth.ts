@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { ModeratorRole } from "@prisma/client";
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES, type UploadMimeType } from "@/lib/validation";
+import { requireEnv } from "@/lib/env";
 
 // Edge-compatible: only `jose` and Web Crypto. Route guards that also check the
 // database live in lib/guards.ts.
@@ -31,11 +32,7 @@ export interface UploadTokenPayload {
 }
 
 function getSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error("JWT_SECRET must be set and at least 32 characters");
-  }
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(requireEnv("JWT_SECRET"));
 }
 
 export async function signModeratorToken(payload: ModeratorTokenPayload): Promise<string> {

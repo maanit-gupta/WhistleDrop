@@ -7,7 +7,7 @@
  */
 export const EVIDENCE_BUCKET = "evidence";
 
-export const objects = new Map<string, { body: Buffer; contentType: string }>();
+export const objects = new Map<string, { body: Buffer; contentType: string; createdAt?: Date }>();
 export const calls = {
   signedUploads: [] as string[],
   signedDownloads: [] as { path: string; expiresIn: number }[],
@@ -34,8 +34,13 @@ export function resetFakeStorage() {
 }
 
 /** What the browser does with the signed upload URL. */
-export function simulateBrowserUpload(path: string, body: Buffer, contentType = "application/octet-stream") {
-  objects.set(path, { body, contentType });
+export function simulateBrowserUpload(
+  path: string,
+  body: Buffer,
+  contentType = "application/octet-stream",
+  createdAt = new Date(),
+) {
+  objects.set(path, { body, contentType, createdAt });
 }
 
 export const pathsUnder = (prefix: string) => [...objects.keys()].filter((p) => p.startsWith(prefix)).sort();
@@ -54,7 +59,7 @@ export async function downloadObject(path: string): Promise<Buffer> {
 export async function uploadObject(path: string, body: Buffer, contentType: string) {
   if (failures.upload?.(path)) throw new Error("Storage upload failed: simulated outage");
   if (objects.has(path)) throw new Error("Storage upload failed: The resource already exists");
-  objects.set(path, { body: Buffer.from(body), contentType });
+  objects.set(path, { body: Buffer.from(body), contentType, createdAt: new Date() });
 }
 
 export async function removeObjects(paths: string[]) {
@@ -65,6 +70,11 @@ export async function removeObjects(paths: string[]) {
 
 export async function listObjects(prefix: string) {
   return [...objects.keys()].filter((p) => p.startsWith(`${prefix}/`) && !p.slice(prefix.length + 1).includes("/"));
+}
+
+export async function listObjectsWithCreatedAt(prefix: string) {
+  const paths = await listObjects(prefix);
+  return paths.map((path) => ({ path, createdAt: objects.get(path)!.createdAt ?? new Date() }));
 }
 
 export async function createSignedDownloadUrl(path: string, expiresInSeconds: number) {
