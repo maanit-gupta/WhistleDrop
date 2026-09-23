@@ -1,16 +1,16 @@
 // Creates (or updates) the private evidence bucket. Run once per Supabase
-// project: npm run storage:setup (reads .env.local).
+// project: npm run storage:setup (reads .env.local). Runs with Node's
+// "react-server" condition because lib/validation.ts is `server-only`.
 import { createClient } from "@supabase/supabase-js";
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES } from "../lib/validation";
+import { requireEnv } from "../lib/env";
 
 const BUCKET = "evidence"; // keep in sync with EVIDENCE_BUCKET in lib/storage.ts
 
 async function main() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set");
-
-  const storage = createClient(url, key, { auth: { persistSession: false } }).storage;
+  const storage = createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
+    auth: { persistSession: false },
+  }).storage;
   // Storage itself also enforces the size cap and type allowlist on upload.
   const options = { public: false, fileSizeLimit: MAX_UPLOAD_BYTES, allowedMimeTypes: [...ALLOWED_UPLOAD_TYPES] };
 

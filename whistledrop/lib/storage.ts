@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { requireEnv } from "@/lib/env";
 
 // Server-only Supabase Storage access using the service role key, which
 // bypasses Storage RLS. `server-only` makes the build fail if this module is
@@ -15,10 +16,9 @@ let client: SupabaseClient | null = null;
 
 function bucket() {
   if (!client) {
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set");
-    client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+    client = createClient(requireEnv("SUPABASE_URL"), requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
   }
   return client.storage.from(EVIDENCE_BUCKET);
 }
@@ -69,6 +69,21 @@ export async function listObjects(prefix: string): Promise<string[]> {
   const { data, error } = await bucket().list(prefix, { limit: 1000 });
   if (error) fail("list", error);
   return data.filter((o) => o.id !== null).map((o) => `${prefix}/${o.name}`);
+}
+
+/** Every object directly under `prefix`, with its creation time (paginated). */
+export async function listObjectsWithCreatedAt(prefix: string): Promise<{ path: string; createdAt: Date }[]> {
+  const PAGE = 1000;
+  const out: { path: string; createdAt: Date }[] = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await bucket().list(prefix, { limit: PAGE, offset, sortBy: { column: "created_at", order: "asc" } });
+    if (error) fail("list", error);
+    for (const o of data) {
+      // Folder placeholders have no id or timestamp.
+      if (o.id !== null && o.created_at) out.push({ path: `${prefix}/${o.name}`, createdAt: new Date(o.created_at) });
+    }
+    if (data.length < PAGE) return out;
+  }
 }
 
 /** Time-limited download link (served with Content-Disposition: attachment). */

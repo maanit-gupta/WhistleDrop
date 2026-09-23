@@ -1,3 +1,4 @@
+import "server-only";
 import type { ModeratorRole } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { verifyModeratorToken } from "@/lib/auth";

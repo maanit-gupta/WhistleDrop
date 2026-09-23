@@ -1,3 +1,18 @@
+/**
+ * Request validation schemas and business rules, shared by the route handlers
+ * and the generated OpenAPI document (lib/openapi.ts).
+ *
+ * SERVER-ONLY. This module extends Zod with zod-to-openapi and carries server
+ * rules, so it must never be part of a browser bundle:
+ * - Client/frontend code may only use `import type { … } from "@/lib/validation"`
+ *   (types come from `z.infer`, and type-only imports are erased at build time).
+ * - If a client component needs runtime validation, create
+ *   `lib/validation.client.ts` that exports plain Zod schemas without the
+ *   OpenAPI extension; don't import this file at runtime from the client.
+ * `import "server-only"` below enforces this: a runtime import from client code
+ * fails the build.
+ */
+import "server-only";
 import "@/lib/zodOpenApi"; // must run before any schema below is created
 import { z } from "zod";
 import { ModeratorRole, NoteVisibility, ReportCategory, ReportStatus } from "@prisma/client";

@@ -17,7 +17,10 @@
     "test:integration": "vitest run --project integration",
     "test:db:up": "docker compose -f compose.test.yml up -d --wait",
     "test:db:down": "docker compose -f compose.test.yml down",
-    "storage:setup": "dotenv -e .env.local -- tsx scripts/setup-storage.ts"
+    "storage:setup": "dotenv -e .env.local -- tsx --conditions=react-server scripts/setup-storage.ts",
+    "env:check": "dotenv -e .env.local -- tsx scripts/check-env.ts",
+    "test:e2e": "next build && vitest run --project e2e",
+    "test:all": "npm test && npm run test:integration && npm run test:e2e"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "9.1.0",
@@ -39,7 +42,6 @@
     "@types/node": "^24.13.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/swagger-ui-dist": "3.30.6",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",

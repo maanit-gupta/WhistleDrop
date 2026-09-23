@@ -1,7 +1,8 @@
 import { createHmac } from "node:crypto";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
-import { internalError, rateLimited } from "@/lib/apiResponse";
+import { apiError, internalError, rateLimited } from "@/lib/apiResponse";
+import { hasUpstashConfig, requireEnv } from "@/lib/env";
 
 // PRIVACY: raw IPs are never stored, not even here. The rate-limit key is
 // HMAC-SHA256(ip) keyed with IP_HASH_SECRET plus the current UTC date, so the
@@ -40,8 +41,7 @@ export function clientIp(request: Request): string {
 
 /** HMAC-SHA256 of the IP, keyed with IP_HASH_SECRET + the UTC date (daily-rotating salt). */
 export function hashClientIp(ip: string, now = new Date()): string {
-  const secret = process.env.IP_HASH_SECRET;
-  if (!secret || secret.length < 32) throw new Error("IP_HASH_SECRET must be set and at least 32 characters");
+  const secret = requireEnv("IP_HASH_SECRET");
   const utcDate = now.toISOString().slice(0, 10);
   return createHmac("sha256", `${secret}:${utcDate}`).update(ip).digest("base64url");
 }
@@ -68,6 +68,14 @@ function createMemoryLimiter(limit: number, windowMs: number) {
   return limiter;
 }
 
+/** Upstash is required but not configured (production without credentials). */
+class RateLimiterUnavailableError extends Error {
+  constructor() {
+    super("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set outside tests and local development");
+    this.name = "RateLimiterUnavailableError";
+  }
+}
+
 type Backend = { kind: "upstash" | "memory"; limiters: Record<RateLimitName, Limiter> };
 
 function forEachLimit(make: (rule: (typeof RATE_LIMITS)[RateLimitName], name: RateLimitName) => Limiter) {
@@ -82,10 +90,7 @@ const memoryLimiters: { reset(): void }[] = [];
 function getBackend(): Backend {
   if (backend) return backend;
 
-  const hasUpstash = Boolean(
-    (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
-      (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN),
-  );
+  const hasUpstash = hasUpstashConfig();
   const env = process.env.NODE_ENV;
 
   if (env === "test" || (env === "development" && !hasUpstash)) {
@@ -100,9 +105,7 @@ function getBackend(): Backend {
     return (backend = { kind: "memory", limiters });
   }
 
-  if (!hasUpstash) {
-    throw new Error("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set outside tests and local development");
-  }
+  if (!hasUpstash) throw new RateLimiterUnavailableError();
 
   const redis = Redis.fromEnv();
   const limiters = forEachLimit(
@@ -130,9 +133,12 @@ export async function checkRateLimit(name: RateLimitName, request: Request): Pro
   try {
     result = await getBackend().limiters[name].limit(hashClientIp(clientIp(request)));
   } catch (err) {
-    // Errors (missing config, Redis rejecting the request) fail closed; a slow
-    // Redis fails open via `timeout` above. Never log the key or IP.
+    // Errors fail closed; a slow Redis fails open via `timeout` above. Never
+    // log the key or IP.
     console.error(`[rateLimit] ${name} check failed:`, err instanceof Error ? err.message : "unknown");
+    if (err instanceof RateLimiterUnavailableError) {
+      return apiError("RATE_LIMITER_UNAVAILABLE", "Service temporarily unavailable", 503);
+    }
     return internalError();
   }
   if (result.success) return null;

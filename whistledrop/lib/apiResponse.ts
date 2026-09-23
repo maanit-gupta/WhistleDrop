@@ -18,6 +18,7 @@ export type ApiErrorCode =
   | "INVALID_UPLOAD"
   | "REPORT_CLOSED"
   | "RATE_LIMITED"
+  | "RATE_LIMITER_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
 export interface ApiErrorBody {

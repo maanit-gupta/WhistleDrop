@@ -28,6 +28,12 @@ const bearerAuth = registry.registerComponent("securitySchemes", "bearerAuth", {
 });
 const secured = [{ [bearerAuth.name]: [] }];
 
+const cronAuth = registry.registerComponent("securitySchemes", "cronSecret", {
+  type: "http",
+  scheme: "bearer",
+  description: "CRON_SECRET. Sent automatically by Vercel Cron; not a moderator token.",
+});
+
 // Request bodies: the existing validation schemas.
 const ReportSubmission = registry.register("ReportSubmission", reportSubmissionSchema);
 const UploadSignRequest = registry.register("UploadSignRequest", uploadSignRequestSchema);
@@ -139,6 +145,7 @@ const e429 = {
   headers: { "Retry-After": { description: "Seconds until the next request is allowed", schema: { type: "integer" as const } } },
 };
 const e500 = error("Unexpected error (INTERNAL_ERROR); details are never returned");
+const e503 = error("Rate limiter not configured on the server (RATE_LIMITER_UNAVAILABLE)");
 
 const idParam = (name: string) => z.object({ [name]: idSchema });
 
@@ -154,6 +161,7 @@ registry.registerPath({
     400: error("Invalid input, invalid/expired upload token (INVALID_UPLOAD_TOKEN), or a file failed validation (INVALID_UPLOAD)"),
     409: error("An upload token was already used (UPLOAD_TOKEN_USED)"),
     429: e429,
+    503: e503,
     500: e500,
   },
 });
@@ -165,7 +173,7 @@ registry.registerPath({
   summary: "Look up a report by case code",
   description: `Returns PUBLIC status updates only. Unknown and malformed codes get the same 404. ${rateLimitNote("lookup")}`,
   request: { params: z.object({ caseCode: z.string() }) },
-  responses: { 200: json(PublicReport, "The report"), 404: e404, 429: e429, 500: e500 },
+  responses: { 200: json(PublicReport, "The report"), 404: e404, 429: e429, 503: e503, 500: e500 },
 });
 
 registry.registerPath({
@@ -182,6 +190,7 @@ registry.registerPath({
     ),
     400: e400,
     429: e429,
+    503: e503,
     500: e500,
   },
 });
@@ -201,6 +210,7 @@ registry.registerPath({
     400: e400,
     401: error("Wrong email or password, or account deactivated (INVALID_CREDENTIALS)"),
     429: e429,
+    503: e503,
     500: e500,
   },
 });
@@ -309,6 +319,24 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/api/cron/cleanup",
+  tags: ["Internal"],
+  summary: "Daily cleanup (Vercel Cron)",
+  description:
+    "Deletes staged uploads older than 1 hour and consumed upload-token records older than the 30-minute token lifetime.",
+  security: [{ [cronAuth.name]: [] }],
+  responses: {
+    200: json(
+      z.object({ deletedStagingObjects: z.number().int(), deletedConsumedUploadTokens: z.number().int() }),
+      "Cleanup summary",
+    ),
+    401: error("Missing or wrong CRON_SECRET (UNAUTHORIZED)"),
+    500: e500,
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/api/openapi",
   tags: ["Docs"],
   summary: "This OpenAPI document",
@@ -331,6 +359,7 @@ export function getOpenApiDocument() {
       { name: "Auth" },
       { name: "Moderator", description: "Bearer token, any role" },
       { name: "Admin", description: "Bearer token, ADMIN role" },
+      { name: "Internal", description: "Scheduled jobs; not for clients" },
       { name: "Docs" },
     ],
   });
