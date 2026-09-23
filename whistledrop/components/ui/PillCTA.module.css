@@ -1,0 +1,55 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  padding: 0 32px;
+  border-radius: var(--radius-pill);
+  background: var(--lime-500);
+  color: var(--ink-950);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: var(--tracking-nav);
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 300ms var(--ease);
+}
+
+.sm {
+  height: 40px;
+  padding: 0 20px;
+}
+
+.label {
+  position: relative;
+  display: inline-block;
+}
+
+.label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 400ms var(--ease);
+}
+
+.pill:hover {
+  background: var(--lime-hover);
+}
+
+.pill:hover .label::after,
+.pill:focus-visible .label::after {
+  transform: scaleX(1);
+}
+
+.pill:disabled,
+.pill[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

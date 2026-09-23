@@ -17,6 +17,10 @@ import { RATE_LIMITS } from "@/lib/rateLimit";
 // The OpenAPI document is generated from the same Zod schemas the routes use
 // to validate requests (lib/validation.ts), so the docs can't drift from the
 // validation. Response shapes had no schemas before; they're declared once here.
+//
+// The response schemas are exported so the browser client (lib/client/api.ts)
+// can derive its types with `import type` + z.infer. Type-only imports are
+// erased, so none of this module reaches a browser bundle.
 
 const registry = new OpenAPIRegistry();
 
@@ -43,16 +47,16 @@ const CreateModerator = registry.register("CreateModerator", createModeratorSche
 const UpdateModerator = registry.register("UpdateModerator", updateModeratorSchema);
 
 // Response shapes.
-const ErrorResponse = registry.register(
+export const ErrorResponse = registry.register(
   "Error",
   z.object({ error: z.object({ code: z.string(), message: z.string() }) }),
 );
-const PublicStatusUpdate = z.object({
+export const PublicStatusUpdate = z.object({
   note: z.string().nullable(),
   newStatus: z.enum(ReportStatus),
   createdAt: z.iso.datetime(),
 });
-const PublicReport = registry.register(
+export const PublicReport = registry.register(
   "PublicReport",
   z.object({
     category: z.enum(ReportCategory),
@@ -63,7 +67,7 @@ const PublicReport = registry.register(
     statusUpdates: z.array(PublicStatusUpdate).describe("PUBLIC updates only; no ids or moderator details."),
   }),
 );
-const ModeratorStatusUpdate = z.object({
+export const ModeratorStatusUpdate = z.object({
   id: z.string(),
   note: z.string().nullable(),
   visibility: z.enum(NoteVisibility),
@@ -72,13 +76,13 @@ const ModeratorStatusUpdate = z.object({
   moderatorId: z.string().nullable(),
   moderator: z.object({ id: z.string(), email: z.string() }).nullable(),
 });
-const AttachmentInfo = z.object({
+export const AttachmentInfo = z.object({
   id: z.string(),
   mimeType: z.enum(ALLOWED_UPLOAD_TYPES),
   sizeBytes: z.number().int(),
   createdAt: z.iso.datetime(),
 });
-const ReportDetail = registry.register(
+export const ReportDetail = registry.register(
   "ReportDetail",
   z.object({
     id: z.string(),
@@ -94,7 +98,7 @@ const ReportDetail = registry.register(
     attachments: z.array(AttachmentInfo),
   }),
 );
-const ReportListItem = z.object({
+export const ReportListItem = z.object({
   id: z.string(),
   caseCode: z.string(),
   category: z.enum(ReportCategory),
@@ -103,7 +107,7 @@ const ReportListItem = z.object({
   updatedAt: z.iso.datetime(),
   closedAt: z.iso.datetime().nullable(),
 });
-const ReportPage = registry.register(
+export const ReportPage = registry.register(
   "ReportPage",
   z.object({
     items: z.array(ReportListItem),
@@ -113,7 +117,7 @@ const ReportPage = registry.register(
     totalPages: z.number().int(),
   }),
 );
-const Moderator = registry.register(
+export const Moderator = registry.register(
   "Moderator",
   z.object({
     id: z.string(),
@@ -123,6 +127,16 @@ const Moderator = registry.register(
     createdAt: z.iso.datetime(),
   }),
 );
+export const ReportCreated = z.object({ caseCode: z.string() });
+export const UploadSignResponse = z.object({ uploadUrl: z.url(), uploadToken: z.string(), expiresIn: z.number().int() });
+export const LoginResponse = z.object({ token: z.string(), tokenType: z.literal("Bearer"), expiresIn: z.number().int() });
+export const AttachmentDownload = z.object({
+  url: z.url(),
+  expiresIn: z.literal(60),
+  mimeType: z.string(),
+  sizeBytes: z.number().int(),
+});
+export const ModeratorList = z.object({ items: z.array(Moderator) });
 
 const json = <T extends z.ZodType>(schema: T, description: string) => ({
   description,
@@ -157,7 +171,7 @@ registry.registerPath({
   description: `Returns only the case code. Attach up to 3 files by passing upload tokens from POST /api/uploads/sign. If any attachment fails, nothing is saved. ${rateLimitNote("submit")}`,
   request: { body: body(ReportSubmission) },
   responses: {
-    201: json(z.object({ caseCode: z.string() }), "Report created"),
+    201: json(ReportCreated, "Report created"),
     400: error("Invalid input, invalid/expired upload token (INVALID_UPLOAD_TOKEN), or a file failed validation (INVALID_UPLOAD)"),
     409: error("An upload token was already used (UPLOAD_TOKEN_USED)"),
     429: e429,
@@ -184,10 +198,7 @@ registry.registerPath({
   description: `PUT the file to uploadUrl (directly to Supabase Storage, not through this API), then pass uploadToken in POST /api/reports within ${30} minutes. ${rateLimitNote("uploadSign")}`,
   request: { body: body(UploadSignRequest) },
   responses: {
-    200: json(
-      z.object({ uploadUrl: z.url(), uploadToken: z.string(), expiresIn: z.number().int() }),
-      "Signed upload URL and token",
-    ),
+    200: json(UploadSignResponse, "Signed upload URL and token"),
     400: e400,
     429: e429,
     503: e503,
@@ -203,10 +214,7 @@ registry.registerPath({
   description: rateLimitNote("login"),
   request: { body: body(ModeratorLogin) },
   responses: {
-    200: json(
-      z.object({ token: z.string(), tokenType: z.literal("Bearer"), expiresIn: z.number().int() }),
-      "JWT for the Authorize button",
-    ),
+    200: json(LoginResponse, "JWT for the Authorize button"),
     400: e400,
     401: error("Wrong email or password, or account deactivated (INVALID_CREDENTIALS)"),
     429: e429,
@@ -263,10 +271,7 @@ registry.registerPath({
   security: secured,
   request: { params: z.object({ id: idSchema, attachmentId: idSchema }) },
   responses: {
-    200: json(
-      z.object({ url: z.url(), expiresIn: z.literal(60), mimeType: z.string(), sizeBytes: z.number().int() }),
-      "Signed download URL",
-    ),
+    200: json(AttachmentDownload, "Signed download URL"),
     401: e401,
     404: e404,
     500: e500,
@@ -279,7 +284,7 @@ registry.registerPath({
   tags: ["Admin"],
   summary: "List moderators",
   security: secured,
-  responses: { 200: json(z.object({ items: z.array(Moderator) }), "All moderators"), 401: e401, 403: e403, 500: e500 },
+  responses: { 200: json(ModeratorList, "All moderators"), 401: e401, 403: e403, 500: e500 },
 });
 
 registry.registerPath({

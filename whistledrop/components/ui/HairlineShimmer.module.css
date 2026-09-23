@@ -1,0 +1,32 @@
+.shimmer {
+  display: grid;
+  gap: 28px;
+  padding-block: 12px;
+}
+
+.row {
+  position: relative;
+  height: 1px;
+  overflow: hidden;
+  background: var(--rule);
+}
+
+.row:nth-child(3n + 2) { width: 86%; }
+.row:nth-child(3n + 3) { width: 64%; }
+
+.row::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  background: var(--fg);
+  opacity: 0.8;
+  animation: shimmer 1.6s var(--ease) infinite;
+  animation-delay: calc(var(--i) * 120ms);
+  transform: translateX(-100%);
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}

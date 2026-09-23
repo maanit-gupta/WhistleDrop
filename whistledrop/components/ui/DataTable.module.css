@@ -1,0 +1,117 @@
+.wrap {
+  width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.table th {
+  padding: 0 16px 14px 0;
+  border-bottom: 1px solid var(--line-dark);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 18px 16px 18px 0;
+  vertical-align: middle;
+}
+
+.table .end {
+  text-align: right;
+  padding-right: 0;
+}
+
+.row {
+  position: relative;
+  border-bottom: 1px solid var(--line-dark);
+}
+
+/* Row hover: an underline draws in from the left over the hairline. */
+.row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--text-light);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 500ms var(--ease);
+  pointer-events: none;
+}
+
+.row:hover::after,
+.row:focus-within::after {
+  transform: scaleX(1);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.rowLink {
+  color: var(--text-light);
+}
+
+.rowLink:focus-visible {
+  outline-offset: 4px;
+}
+
+.cards {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .table {
+    display: none;
+  }
+
+  .cards {
+    display: grid;
+    gap: 12px;
+  }
+
+  .card {
+    padding: 20px;
+    background: var(--ink-800);
+    border: 1px solid var(--line-dark);
+    border-radius: var(--radius-card);
+  }
+
+  .cardPrimary {
+    font-size: 17px;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--line-dark);
+  }
+
+  .cardFields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+  }
+
+  .cardField dt {
+    margin-bottom: 4px;
+    font-family: var(--font-ui);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .cardField dd {
+    font-size: 14px;
+  }
+}

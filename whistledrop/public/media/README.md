@@ -1,0 +1,32 @@
+# /public/media
+
+Intentionally empty. Every visual on the site is generated inline (SVG/CSS) by
+`components/visuals/*`, so there are no photos, videos, stock images or
+external image URLs.
+
+## Replacing a generated visual with a real asset
+
+1. Put the file here, e.g. `public/media/pleated-fan.jpg`.
+2. Point its slot at it in `components/visuals/media.ts`:
+
+   ```ts
+   "pleated-fan": "/media/pleated-fan.jpg",
+   ```
+
+That's all. The visual component renders the image inside the same
+`MediaFrame` (same box, `object-fit: cover`, grayscale, and the lime-wash
+multiply where that visual uses it), so no layout code changes.
+
+| Slot | Used by | Treatment |
+| --- | --- | --- |
+| `pleated-fan` | `PleatedFan` | grayscale, multiplied onto `--lime-200` |
+| `diagonal-ribbons` | `DiagonalRibbons` | grayscale |
+| `abstract-tile-1` … `-3` | `AbstractTile` variants 0–2 (SlideTile) | grayscale |
+
+Rules for assets:
+
+- Local files only. The Content-Security-Policy allows images from this
+  origin (plus `data:`/`blob:`) and nothing else.
+- No images of real people, and nothing that could identify a reporter,
+  a workplace or a location. Strip metadata (EXIF/GPS) before committing.
+- Monochrome sources work best; colour is removed anyway.

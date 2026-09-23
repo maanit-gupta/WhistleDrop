@@ -16,6 +16,7 @@ import "server-only";
 import "@/lib/zodOpenApi"; // must run before any schema below is created
 import { z } from "zod";
 import { ModeratorRole, NoteVisibility, ReportCategory, ReportStatus } from "@prisma/client";
+import { isValidTransition } from "@/lib/transitions.shared";
 
 /** Evidence uploads: the only accepted types, the per-file size cap, and files per report. */
 export const ALLOWED_UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"] as const;
@@ -51,18 +52,9 @@ export const uploadSignRequestSchema = z
 
 export type UploadSignRequest = z.infer<typeof uploadSignRequestSchema>;
 
-/** The only permitted status transitions. Anything else is rejected. */
-export const ALLOWED_TRANSITIONS: Record<ReportStatus, readonly ReportStatus[]> = {
-  SUBMITTED: ["UNDER_REVIEW"],
-  UNDER_REVIEW: ["RESOLVED", "DISMISSED"],
-  RESOLVED: ["CLOSED"],
-  DISMISSED: ["CLOSED"],
-  CLOSED: [],
-};
-
-export function isValidTransition(from: ReportStatus, to: ReportStatus): boolean {
-  return ALLOWED_TRANSITIONS[from].includes(to);
-}
+// Status transition rules live in lib/transitions.shared.ts so the browser UI
+// can import the same rules; re-exported here for existing server imports.
+export { ALLOWED_TRANSITIONS, isValidTransition } from "@/lib/transitions.shared";
 
 /** Request body shape; the transition is checked against the report's current status. */
 export const statusUpdateRequestSchema = z

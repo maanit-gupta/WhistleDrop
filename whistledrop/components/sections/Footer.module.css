@@ -1,0 +1,83 @@
+.footer {
+  padding: 96px 0 72px;
+  font-size: 12px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: var(--tracking-display);
+}
+
+.bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 48px;
+  padding-top: 48px;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, auto));
+  gap: 32px 64px;
+}
+
+.heading {
+  margin-bottom: 16px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: var(--tracking-nav);
+}
+
+.copyright {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .bottom {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .footer {
+    /* Clear the fixed "Leave site" button. */
+    padding: 72px 0 88px;
+  }
+
+  .wordmark {
+    font-size: 36px;
+  }
+}

@@ -1,0 +1,47 @@
+.band {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: var(--section-pad) 0 calc(var(--section-pad) * 0.75);
+}
+
+/* Faint, behind everything. */
+.fan {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.22;
+}
+
+.head {
+  padding-bottom: 56px;
+}
+
+.rule {
+  --rule: var(--ink-950);
+}
+
+/* The CTA's top edge sits on the hairline. */
+.foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+}
+
+.copy {
+  max-width: 40ch;
+  padding-top: 20px;
+  font-size: var(--fs-body-sm);
+}
+
+@media (max-width: 767px) {
+  .foot {
+    flex-direction: column-reverse;
+    gap: 24px;
+  }
+
+  .copy {
+    padding-top: 0;
+  }
+}

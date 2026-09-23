@@ -1,0 +1,27 @@
+.exit {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  height: 36px;
+  padding: 0 16px;
+  background: var(--ink-950);
+  color: var(--text-light);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: var(--tracking-nav);
+  --focus-ring: var(--lime-500);
+  transition: border-color 200ms var(--ease);
+}
+
+.exit:hover {
+  border-color: var(--text-light);
+}
+
+@media print {
+  .exit {
+    display: none;
+  }
+}

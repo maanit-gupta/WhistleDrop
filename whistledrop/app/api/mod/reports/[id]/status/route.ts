@@ -2,7 +2,8 @@ import { prisma } from "@/lib/db";
 import { withModerator } from "@/lib/guards";
 import { moderatorReportDetail } from "@/lib/reports";
 import { listObjects, removeObjects } from "@/lib/storage";
-import { isValidTransition, reportIdSchema, statusUpdateRequestSchema } from "@/lib/validation";
+import { isValidTransition } from "@/lib/transitions.shared";
+import { reportIdSchema, statusUpdateRequestSchema } from "@/lib/validation";
 import {
   apiSuccess,
   badRequest,

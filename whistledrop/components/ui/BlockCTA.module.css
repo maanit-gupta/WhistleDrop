@@ -1,0 +1,38 @@
+.block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  height: 68px;
+  padding: 0 24px;
+  background: var(--ink-950);
+  color: var(--text-light);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-block);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  letter-spacing: var(--tracking-nav);
+  text-align: left;
+  --focus-ring: var(--lime-500);
+}
+
+.label {
+  transition: transform 350ms var(--ease);
+}
+
+.arrow {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 20px;
+}
+
+.block:hover .label,
+.block:focus-visible .label {
+  transform: translateX(6px);
+}
+
+.block:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
