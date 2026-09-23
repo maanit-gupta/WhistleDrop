@@ -1,0 +1,38 @@
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 180px;
+  height: 56px;
+  padding: 0 24px;
+  background: var(--ink-950);
+  color: var(--lime-500);
+  border-radius: var(--radius-block);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  letter-spacing: var(--tracking-nav);
+  white-space: nowrap;
+  --focus-ring: var(--ink-950);
+}
+
+.label {
+  position: relative;
+}
+
+.label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 400ms var(--ease);
+}
+
+.cta:hover .label::after,
+.cta:focus-visible .label::after {
+  transform: scaleX(1);
+}

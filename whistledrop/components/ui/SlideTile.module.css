@@ -1,0 +1,143 @@
+.carousel {
+  position: relative;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gutter);
+}
+
+.visualTile,
+.card {
+  position: relative;
+  height: 340px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.visualTile {
+  background: var(--ink-850);
+}
+
+.visualInner {
+  position: absolute;
+  inset: 0;
+  filter: grayscale(1);
+  animation: fade 600ms var(--ease) both;
+}
+
+.bars {
+  --bar-delay: 500ms; /* after the scanline sweep */
+}
+
+/* Horizontal lime scanlines sweeping top to bottom (imagery, so the stripes are allowed). */
+.scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(189, 252, 138, 0.55) 0 1px,
+    transparent 1px 7px
+  );
+  clip-path: inset(0 0 100% 0);
+  animation: sweep 600ms var(--ease) both;
+}
+
+@keyframes sweep {
+  0% { clip-path: inset(0 0 100% 0); opacity: 1; }
+  60% { clip-path: inset(0 0 0 0); opacity: 1; }
+  100% { clip-path: inset(100% 0 0 0); opacity: 0; }
+}
+
+.card {
+  display: flex;
+  background: var(--ink-800);
+  border: 1px solid var(--line-dark);
+  color: var(--text-light);
+}
+
+.cardInner {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  padding: 32px;
+  animation: fade 700ms var(--ease) both;
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.statement {
+  max-width: 34ch;
+  font-size: 17px;
+  font-weight: 300;
+  line-height: 1.45;
+}
+
+.cardFoot {
+  padding-top: 20px;
+  border-top: 1px solid var(--line-dark);
+}
+
+.label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--lime-ink);
+}
+
+.subLabel {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Arrows float outside the pair (desktop). */
+.arrows {
+  position: absolute;
+  right: 0;
+  top: -56px;
+  display: flex;
+  gap: 8px;
+}
+
+.arrow {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-light);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 300;
+  background: none;
+  border: 0;
+  transition: transform 300ms var(--ease);
+}
+
+.arrow:first-child:hover {
+  transform: translateX(-4px);
+}
+
+.arrow:last-child:hover {
+  transform: translateX(4px);
+}
+
+@media (max-width: 767px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .arrows {
+    position: static;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+}

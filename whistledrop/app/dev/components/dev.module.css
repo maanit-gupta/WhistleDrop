@@ -1,0 +1,73 @@
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  padding-top: 120px;
+}
+
+.heroTitle {
+  margin: 24px 0 32px;
+}
+
+.block {
+  padding-block: 96px;
+  border-top: 1px solid var(--rule);
+}
+
+.blockTitle {
+  margin-bottom: 40px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+  margin: 32px 0;
+}
+
+.narrow {
+  display: grid;
+  gap: 16px;
+  max-width: 420px;
+}
+
+.gridCell {
+  padding: 12px 8px;
+  border: 1px solid var(--line-dark);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.form {
+  display: grid;
+  gap: 40px;
+  max-width: 640px;
+}
+
+.slidePad {
+  padding-top: 64px;
+}
+
+.spacer {
+  height: 48px;
+}
+
+.note {
+  margin-top: 32px;
+}
+
+.visual {
+  position: relative;
+  height: 420px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.visualSm {
+  position: relative;
+  height: 280px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}

@@ -1,0 +1,28 @@
+.section {
+  background: var(--ink-850);
+  color: var(--text-light);
+}
+
+.title {
+  margin: 28px 0 32px;
+}
+
+/* The only lime word in any heading on the site. */
+.accent {
+  color: var(--lime-500);
+}
+
+.rule {
+  margin: 72px 0 0;
+}
+
+/* The first row's own top hairline draws over this one instead of doubling it. */
+.rule + * {
+  margin-top: -1px;
+}
+
+@media (max-width: 767px) {
+  .rule {
+    margin-top: 48px;
+  }
+}

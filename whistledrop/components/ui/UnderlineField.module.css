@@ -1,0 +1,254 @@
+.field {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--fg-secondary);
+  padding: 0;
+}
+
+.required {
+  color: var(--fg);
+}
+
+.control {
+  width: 100%;
+  padding: 8px 0 10px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: 17px;
+  line-height: 1.4;
+  transition: border-color 250ms var(--ease);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+:global(.surface-light) .control,
+:global(.surface-warm) .control,
+:global(.surface-lime) .control,
+:global(.surface-lime-wash) .control {
+  border-bottom-color: rgba(10, 10, 10, 0.35);
+}
+
+.control::placeholder {
+  color: var(--fg-secondary);
+  opacity: 1;
+}
+
+/* The underline is the focus indicator for text controls (lime, like the ring). */
+.control:focus,
+.control:focus-visible {
+  outline: none;
+  border-bottom-color: var(--focus-ring);
+  box-shadow: 0 1px 0 0 var(--focus-ring);
+}
+
+.field[data-invalid] .control {
+  border-bottom-color: var(--fg);
+  border-bottom-style: dashed;
+}
+
+.textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+input[type="date"].control {
+  color-scheme: dark;
+}
+
+.selectWrap {
+  position: relative;
+}
+
+.select {
+  padding-right: 28px;
+  cursor: pointer;
+}
+
+.select option {
+  background: var(--ink-900);
+  color: var(--text-light);
+}
+
+.chevron {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 1px solid var(--fg);
+  border-bottom: 1px solid var(--fg);
+  transform: translateY(-75%) rotate(45deg);
+  pointer-events: none;
+}
+
+.messages {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.error,
+.hint,
+.counter {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+}
+
+.error {
+  color: var(--fg);
+}
+
+.hint {
+  color: var(--fg-secondary);
+}
+
+.counter {
+  flex-shrink: 0;
+  color: var(--fg-secondary);
+}
+
+.counterNear {
+  color: var(--fg);
+}
+
+/* Multi-select chips */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 14px;
+}
+
+.chips:focus-within {
+  border-bottom-color: var(--focus-ring);
+}
+
+.chip {
+  position: relative;
+}
+
+.chipInput {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.chip label {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: var(--tracking-nav);
+  color: var(--fg);
+  cursor: pointer;
+  transition:
+    border-color 200ms var(--ease),
+    background-color 200ms var(--ease);
+}
+
+.chip label:hover {
+  border-color: var(--fg);
+}
+
+.chip[data-checked] label {
+  border-color: var(--lime-500);
+  background: rgba(189, 252, 138, 0.08);
+}
+
+.chip[data-checked] label::before {
+  content: "✓";
+  margin-right: 6px;
+  color: var(--lime-ink);
+}
+
+.chipInput:focus-visible + label {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.fieldset:disabled .chip label {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Checkbox: a square outline that fills lime with an ink tick when checked. */
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+:global(.surface-light) .check,
+:global(.surface-warm) .check {
+  border-bottom-color: rgba(10, 10, 10, 0.35);
+}
+
+.checkInput {
+  flex-shrink: 0;
+  display: grid;
+  place-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 1px solid var(--fg);
+  border-radius: var(--radius-submit);
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: background-color 200ms var(--ease), border-color 200ms var(--ease);
+}
+
+.checkInput::before {
+  content: "";
+  width: 10px;
+  height: 5px;
+  margin-top: -3px;
+  border-left: 1.5px solid var(--ink-950);
+  border-bottom: 1.5px solid var(--ink-950);
+  transform: rotate(-45deg) scale(0);
+  transition: transform 200ms var(--ease);
+}
+
+.checkInput:checked {
+  background: var(--lime-500);
+  border-color: var(--lime-500);
+}
+
+.checkInput:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+.checkLabel {
+  font-size: 17px;
+  line-height: 1.35;
+  color: var(--fg);
+  cursor: pointer;
+}

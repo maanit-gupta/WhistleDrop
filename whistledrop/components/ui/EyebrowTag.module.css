@@ -1,0 +1,25 @@
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 12px;
+  background: rgba(189, 252, 138, 0.08);
+  border: 1px solid rgba(189, 252, 138, 0.35);
+  border-radius: var(--radius-pill);
+  color: var(--lime-ink);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* --lime-ink on a light surface is 1.5:1; use the surface's ink instead. */
+:global(.surface-light) .tag,
+:global(.surface-warm) .tag,
+:global(.surface-lime) .tag,
+:global(.surface-lime-wash) .tag {
+  color: var(--fg);
+  border-color: var(--fg);
+}

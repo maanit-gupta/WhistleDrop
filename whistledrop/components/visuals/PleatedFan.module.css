@@ -1,0 +1,11 @@
+.pleats {
+  transform-box: view-box;
+  transform-origin: 500px 584px;
+  animation: pleats-turn 12s linear infinite;
+}
+
+/* Two pleats (2 × 7.5°) per loop: the end frame matches the start frame. */
+@keyframes pleats-turn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-15deg); }
+}

@@ -1,0 +1,42 @@
+.section {
+  padding-bottom: calc(var(--section-pad) * 0.75);
+}
+
+.title {
+  margin-top: 28px;
+}
+
+.rows {
+  margin-top: 80px;
+}
+
+.action {
+  justify-self: start;
+}
+
+.trackForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  align-items: start;
+  column-gap: 20px;
+}
+
+/* Sits on the input's underline (label 11px + gap + control). */
+.trackButton {
+  margin-top: 23px;
+}
+
+@media (max-width: 767px) {
+  .rows {
+    margin-top: 48px;
+  }
+
+  .trackForm {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 20px;
+  }
+
+  .trackButton {
+    margin-top: 0;
+  }
+}

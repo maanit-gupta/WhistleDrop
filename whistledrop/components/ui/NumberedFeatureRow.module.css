@@ -1,0 +1,115 @@
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1px minmax(0, 1fr) minmax(0, 46ch);
+  align-items: center;
+  column-gap: 32px;
+  min-height: 180px;
+  padding-block: 32px;
+}
+
+/* Top and bottom hairlines; consecutive rows share one (the upper row's bottom). */
+.row::before,
+.row::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--rule);
+  transform-origin: left center;
+  transition: transform var(--dur-draw) var(--ease);
+}
+
+.row::before {
+  top: 0;
+}
+
+.row::after {
+  bottom: 0;
+}
+
+.row + .row::before {
+  display: none;
+}
+
+.number,
+.title,
+.right {
+  transition:
+    transform var(--dur-reveal) var(--ease) calc(var(--dur-draw) * 0.6),
+    opacity var(--dur-reveal) var(--ease) calc(var(--dur-draw) * 0.6);
+}
+
+@media (scripting: enabled) {
+  .row[data-reveal="pending"]::before,
+  .row[data-reveal="pending"]::after {
+    transform: scaleX(0);
+  }
+
+  .row[data-reveal="pending"] .number,
+  .row[data-reveal="pending"] .title,
+  .row[data-reveal="pending"] .right {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  .row[data-reveal="pending"] .rule {
+    transform: scaleY(0);
+  }
+}
+
+.number {
+  min-width: 2ch;
+  font-family: var(--font-display);
+  font-size: clamp(72px, 8vw, 120px);
+  font-weight: 200;
+  line-height: 0.85;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.rule {
+  align-self: stretch;
+  width: 1px;
+  background: var(--rule);
+  transform-origin: center top;
+  transition: transform var(--dur-draw) var(--ease);
+}
+
+.title {
+  max-width: 16ch;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.right {
+  display: grid;
+  gap: 20px;
+}
+
+.description {
+  color: var(--fg-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 46ch;
+}
+
+@media (max-width: 767px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 16px;
+    min-height: 0;
+  }
+
+  .rule {
+    display: none;
+  }
+
+  .right {
+    margin-top: 8px;
+  }
+}

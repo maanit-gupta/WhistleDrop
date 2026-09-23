@@ -1,0 +1,31 @@
+.destination {
+  display: grid;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line-dark);
+  border-bottom: 1px solid var(--line-dark);
+}
+
+.label {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.url {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-light);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.cancel {
+  padding: 8px 0;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  letter-spacing: var(--tracking-nav);
+}

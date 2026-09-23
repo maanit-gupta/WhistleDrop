@@ -1,0 +1,35 @@
+.state {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding-block: 48px;
+}
+
+.rule {
+  width: 48px;
+  height: 1px;
+  margin-bottom: 12px;
+  background: var(--fg);
+}
+
+.error .rule {
+  background: var(--lime-500);
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.description {
+  max-width: 46ch;
+  color: var(--fg-secondary);
+  font-size: 15px;
+}
+
+.action {
+  margin-top: 16px;
+}

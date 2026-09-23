@@ -1,0 +1,34 @@
+.page {
+  display: flex;
+  align-items: flex-end;
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: 160px 0 120px;
+}
+
+.title {
+  margin-bottom: 48px;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding-top: 28px;
+}
+
+.copy {
+  font-size: 20px;
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding-bottom: 96px;
+  }
+
+  .copy {
+    font-size: 17px;
+  }
+}

@@ -1,0 +1,40 @@
+.card {
+  padding: 32px;
+  background: var(--ink-800);
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-card);
+  color: var(--text-light);
+}
+
+.heading {
+  margin-bottom: 24px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.list {
+  display: grid;
+  gap: 24px;
+}
+
+.item + .item {
+  padding-top: 24px;
+  border-top: 1px solid var(--line-dark);
+}
+
+.label {
+  margin-bottom: 6px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.value {
+  font-size: 15px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}

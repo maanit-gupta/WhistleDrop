@@ -1,0 +1,88 @@
+.hero {
+  display: flex;
+  flex-direction: column;
+}
+
+.top {
+  display: flex;
+  align-items: flex-end;
+  min-height: 45vh;
+  min-height: 45svh;
+  padding-top: 140px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30%;
+  align-items: stretch;
+}
+
+.title {
+  align-self: end;
+  padding: 0 32px 48px 0;
+}
+
+/* The vertical rule starts at the headline's cap height, not its line box. */
+.aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  margin-top: calc(var(--fs-h1) * 0.11);
+  border-left: 1px solid var(--rule);
+}
+
+.subline {
+  padding-left: 24px;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+/* Flush with the rule, the container edge and the media below. */
+.cta {
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.media {
+  height: 55vh;
+  height: 55svh;
+  min-height: 300px;
+}
+
+@media (max-width: 767px) {
+  .top {
+    min-height: 0;
+    padding-top: 128px;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .title {
+    padding: 0 0 28px;
+  }
+
+  .aside {
+    margin-top: 0;
+    border-left: 0;
+  }
+
+  .subline {
+    padding-left: 0;
+    font-size: 17px;
+  }
+
+  .cta {
+    width: calc(100% + 2 * var(--page-inset));
+    margin-inline: calc(-1 * var(--page-inset));
+    border-inline: 0;
+  }
+
+  .media {
+    height: 48vh;
+    height: 48svh;
+    min-height: 260px;
+  }
+}

@@ -1,0 +1,83 @@
+/*
+ * Lime Ledger design tokens. Values are the design system's, verbatim.
+ *
+ * Lime rule: --lime-500 is never a large flat block except the Report page
+ * band and buttons. Large lime areas use --lime-200 with a monochrome image
+ * multiplied on top. At most ~3 lime moments per screen.
+ */
+:root {
+  /* Colour */
+  --lime-500: #bdfc8a;
+  --lime-200: #cff6ae;
+  --lime-300: #c5e2a8;
+  --lime-ink: #a8e07a;
+  /* PillCTA hover (from the PillCTA spec). */
+  --lime-hover: #c9ff9c;
+
+  --ink-950: #0d0d0d;
+  --ink-900: #151515;
+  --ink-850: #202020;
+  --ink-800: #262626;
+
+  --line-dark: #3a3a3a;
+  --line-light: rgba(26, 26, 26, 0.6); /* #1A1A1A at ~0.6 */
+
+  --paper: #ffffff;
+  --paper-warm: #f3f2f0;
+
+  --text-dark: #0a0a0a;
+  --text-light: #f2f2f2;
+  --text-muted: #9a9a9a;
+
+  /* Typography (families come from next/font in app/layout.tsx) */
+  --font-display: var(--font-inter-tight), "Helvetica Now Display", "Neue Haas Grotesk Display", Helvetica, Arial, sans-serif;
+  --font-ui: var(--font-barlow), "DIN Next", "Helvetica Neue", Arial, sans-serif;
+
+  --fs-h1: clamp(56px, 7.5vw, 112px);
+  --fs-h2: clamp(40px, 4.5vw, 64px);
+  --fs-h3: 28px;
+  --fs-numeral: 64px;
+  --fs-nav: 15px;
+  --fs-eyebrow: 11px;
+  --fs-body: 16px;
+  --fs-body-lg: 17px;
+  --fs-body-sm: 15px;
+
+  --tracking-display: -0.035em;
+  --tracking-nav: 0.02em;
+  --tracking-eyebrow: 0.14em;
+  --lh-display: 0.95;
+  --lh-body: 1.45;
+  --measure-dark: 42ch;
+
+  /* Shape */
+  --radius-pill: 999px;
+  --radius-card: 4px;
+  --radius-block: 0;
+  --radius-submit: 2px;
+  --hairline: 1px;
+
+  /* Layout */
+  --section-pad: 160px;
+  --content-max: 1200px;
+  --gutter: 24px;
+  --page-inset: 24px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-reveal: 700ms;
+  --dur-stagger: 80ms;
+  --dur-draw: 900ms;
+  --dur-bars: 600ms;
+  --dur-fast: 200ms;
+
+  /* Focus */
+  --focus-ring: var(--lime-500);
+}
+
+@media (max-width: 767px) {
+  :root {
+    --section-pad: 96px;
+    --page-inset: 16px;
+  }
+}

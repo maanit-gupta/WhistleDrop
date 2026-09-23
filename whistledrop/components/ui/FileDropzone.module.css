@@ -1,0 +1,136 @@
+.zone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 72px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+  transition: border-color 250ms var(--ease), background-color 250ms var(--ease);
+}
+
+.zone:focus-within,
+.zone[data-dragging] {
+  border-bottom-color: var(--focus-ring);
+  box-shadow: 0 1px 0 0 var(--focus-ring);
+}
+
+.zone[data-dragging] {
+  background: rgba(189, 252, 138, 0.05);
+}
+
+/* The hidden input's focus shows on its visible label. */
+.zone:has(input:focus-visible) .cta {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.cta {
+  font-family: var(--font-display);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.zone[data-blocked] .cta {
+  cursor: not-allowed;
+  color: var(--fg-secondary);
+}
+
+.browse {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.or {
+  color: var(--fg-secondary);
+}
+
+.count {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--fg-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.files {
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.file {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.fileRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.fileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.fileMeta {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--fg-secondary);
+}
+
+.remove {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: var(--tracking-nav);
+}
+
+.remove:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Per-file progress hairline. */
+.progress {
+  position: relative;
+  display: block;
+  height: 1px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.progressFill {
+  position: absolute;
+  inset: 0;
+  background: var(--fg);
+  transform-origin: left center;
+  transition: transform 300ms var(--ease);
+}
+
+.file[data-status="done"] .progressFill {
+  background: var(--lime-500);
+}
+
+.file[data-status="error"] .progressFill {
+  background: var(--fg);
+  opacity: 0.4;
+}
+
+@media (max-width: 767px) {
+  .fileRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .fileMeta {
+    grid-row: 2;
+  }
+}

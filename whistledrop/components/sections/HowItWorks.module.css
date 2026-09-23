@@ -1,0 +1,32 @@
+.section {
+  border-top: 1px solid var(--rule);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 40fr) minmax(0, 60fr);
+  column-gap: var(--gutter);
+  align-items: start;
+}
+
+.intro {
+  position: sticky;
+  top: 120px;
+  padding-right: 48px;
+}
+
+.title {
+  margin: 28px 0 32px;
+}
+
+@media (max-width: 767px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 48px;
+  }
+
+  .intro {
+    position: static;
+    padding-right: 0;
+  }
+}

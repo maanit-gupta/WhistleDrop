@@ -1,0 +1,90 @@
+.timeline {
+  --node: 9px;
+  position: relative;
+  display: grid;
+  gap: 32px;
+  padding-left: 32px;
+}
+
+/* The vertical hairline, from the first node to the last. */
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--line-dark);
+}
+
+.entry {
+  position: relative;
+}
+
+/* Nodes: white at 40% (3.7:1 on ink, above the 3:1 needed for graphics); current is lime. */
+.node {
+  position: absolute;
+  left: -32px;
+  top: 3px;
+  width: var(--node);
+  height: var(--node);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 4px var(--timeline-bg, var(--ink-950));
+}
+
+.current .node {
+  background: var(--lime-500);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.status {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-light);
+}
+
+.current .status {
+  color: var(--lime-ink);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.internal {
+  border-style: dashed;
+  color: var(--text-light);
+}
+
+.note {
+  margin-top: 8px;
+  max-width: 60ch;
+  font-size: 15px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
