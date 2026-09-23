@@ -1,0 +1,18 @@
+# Disposable Postgres for integration tests (npm run test:integration).
+# Data lives in tmpfs, so every `down`/`up` starts from an empty database.
+services:
+  postgres-test:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: whistledrop_test
+    ports:
+      - "127.0.0.1:54329:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d whistledrop_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
