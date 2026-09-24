@@ -13,11 +13,13 @@ export interface TimelineEntry {
   visibility?: "PUBLIC" | "INTERNAL";
   /** Moderator view only, e.g. the acting moderator's email. */
   author?: ReactNode;
+  /** Label colour: "accent" is lime (e.g. the review team), "muted" is secondary text (e.g. "You"). */
+  tone?: "accent" | "muted";
 }
 
 export interface StatusTimelineProps {
   entries: TimelineEntry[];
-  /** Index of the current entry; defaults to the last one. */
+  /** Index of the current entry; defaults to the last one. -1 marks none (e.g. a conversation). */
   currentIndex?: number;
   className?: string;
 }
@@ -36,7 +38,9 @@ export function StatusTimeline({ entries, currentIndex = entries.length - 1, cla
           <li key={entry.key} className={cx(styles.entry, current && styles.current)} aria-current={current ? "step" : undefined}>
             <span className={styles.node} aria-hidden="true" />
             <div className={styles.head}>
-              <span className={styles.status}>{entry.status}</span>
+              <span className={cx(styles.status, entry.tone === "accent" && styles.accent, entry.tone === "muted" && styles.muted)}>
+                {entry.status}
+              </span>
               {entry.visibility && (
                 <span className={cx(styles.badge, entry.visibility === "INTERNAL" && styles.internal)}>
                   {entry.visibility === "INTERNAL" ? "Internal" : "Public"}

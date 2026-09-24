@@ -22,8 +22,27 @@
   grid-column: span 3;
 }
 
+.awaiting {
+  grid-column: span 3;
+  align-self: end;
+}
+
+.code {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+/* Smaller than the page eyebrows: a row marker, not a heading. */
+.replyTag {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
 .clear {
-  grid-column: span 6;
+  grid-column: span 3;
   align-self: end;
   justify-self: end;
   padding-bottom: 12px;
@@ -62,12 +81,13 @@
   }
 
   .date,
-  .sort {
+  .sort,
+  .awaiting {
     grid-column: span 6;
   }
 
   .clear {
-    grid-column: span 12;
+    grid-column: span 6;
     justify-self: start;
   }
 }

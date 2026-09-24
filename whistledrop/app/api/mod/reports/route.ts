@@ -11,11 +11,12 @@ const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 export const GET = withModerator(async (request: NextRequest) => {
   const parsed = modReportsQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!parsed.success) return validationError(parsed.error);
-  const { q, status, category, from, to, sort, order, page, pageSize } = parsed.data;
+  const { q, status, category, from, to, sort, order, page, pageSize, awaitingReply } = parsed.data;
 
   const where: Prisma.ReportWhereInput = {
     ...(status && { status: { in: status } }),
     ...(category && { category: { in: category } }),
+    ...(awaitingReply !== undefined && { awaitingReply }),
     ...((from || to) && { createdAt: { ...(from && { gte: from }), ...(to && { lte: to }) } }),
     ...(q && {
       OR: [
@@ -43,6 +44,7 @@ export const GET = withModerator(async (request: NextRequest) => {
           createdAt: true,
           updatedAt: true,
           closedAt: true,
+          awaitingReply: true,
         },
       }),
     ]);

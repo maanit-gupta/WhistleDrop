@@ -21,6 +21,8 @@ import { POST as login } from "@/app/api/mod/login/route";
 import { GET as listReports } from "@/app/api/mod/reports/route";
 import { GET as getReport } from "@/app/api/mod/reports/[id]/route";
 import { PATCH as patchStatus } from "@/app/api/mod/reports/[id]/status/route";
+import { POST as postMessage } from "@/app/api/mod/reports/[id]/messages/route";
+import { POST as postNote } from "@/app/api/mod/reports/[id]/notes/route";
 import { signModeratorToken, verifyToken } from "@/lib/auth";
 import { withModerator } from "@/lib/guards";
 import { moderatorReportDetail } from "@/lib/reports";
@@ -63,8 +65,15 @@ beforeEach(() => {
   db.prisma.report.findMany.mockResolvedValue([]);
   db.prisma.report.findUnique.mockResolvedValue(null);
   db.prisma.report.count.mockResolvedValue(0);
-  // Array form (list route: [count, findMany]) runs the queries; callback form isn't reached here.
-  db.prisma.$transaction.mockImplementation(async (arg: unknown) => (Array.isArray(arg) ? Promise.all(arg) : null));
+  // Array form (list route: [count, findMany]) runs the queries. Callback form (message and note
+  // routes) gets a client on which the report doesn't exist.
+  db.prisma.$transaction.mockImplementation(async (arg: unknown) =>
+    Array.isArray(arg)
+      ? Promise.all(arg)
+      : (arg as (tx: unknown) => Promise<unknown>)({
+          report: { updateMany: async () => ({ count: 0 }), findUnique: async () => null },
+        }),
+  );
 });
 
 describe("POST /api/mod/login", () => {
@@ -169,6 +178,24 @@ describe("moderator auth guard on every moderator route", () => {
         }),
         { params: Promise.resolve({ id: REPORT_ID }) },
       ),
+    "POST /api/mod/reports/:id/messages": (headers: HeadersInit) =>
+      postMessage(
+        new Request(`http://localhost/api/mod/reports/${REPORT_ID}/messages`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ body: "Hello" }),
+        }),
+        { params: Promise.resolve({ id: REPORT_ID }) },
+      ),
+    "POST /api/mod/reports/:id/notes": (headers: HeadersInit) =>
+      postNote(
+        new Request(`http://localhost/api/mod/reports/${REPORT_ID}/notes`, {
+          method: "POST",
+          headers: { ...headers, "content-type": "application/json" },
+          body: JSON.stringify({ body: "Hello" }),
+        }),
+        { params: Promise.resolve({ id: REPORT_ID }) },
+      ),
   };
 
   const now = () => Math.floor(Date.now() / 1000);
@@ -240,10 +267,33 @@ describe("moderator report routes (authenticated)", () => {
       params: Promise.resolve({ id }),
     });
 
-  it("lists reports with only id, caseCode, category, status and createdAt", async () => {
+  it("lists reports with only their summary fields (no description, messages or notes)", async () => {
     await list();
     const { select } = db.prisma.report.findMany.mock.calls[0][0];
-    expect(Object.keys(select).sort()).toEqual(["caseCode", "category", "closedAt", "createdAt", "id", "status", "updatedAt"]);
+    expect(Object.keys(select).sort()).toEqual([
+      "awaitingReply",
+      "caseCode",
+      "category",
+      "closedAt",
+      "createdAt",
+      "id",
+      "status",
+      "updatedAt",
+    ]);
+  });
+
+  it.each([
+    ["?awaitingReply=true", { awaitingReply: true }],
+    ["?awaitingReply=false", { awaitingReply: false }],
+    ["", {}],
+  ])("passes the awaitingReply filter %j to the query", async (query, where) => {
+    await list(query);
+    expect(db.prisma.report.findMany.mock.calls[0][0].where).toEqual(where);
+  });
+
+  it("rejects an awaitingReply value other than true/false with 400", async () => {
+    expect((await list("?awaitingReply=yes")).status).toBe(400);
+    expect(db.prisma.report.findMany).not.toHaveBeenCalled();
   });
 
   it("passes status and category filters to the query", async () => {
@@ -265,12 +315,35 @@ describe("moderator report routes (authenticated)", () => {
     expect(db.prisma.report.findMany).not.toHaveBeenCalled();
   });
 
-  it("returns a report with its full status history", async () => {
-    const report = { id: REPORT_ID, status: "UNDER_REVIEW", statusUpdates: [{ id: "clupdate00000000000000001", newStatus: "UNDER_REVIEW" }] };
-    db.prisma.report.findUnique.mockResolvedValue(report);
+  it("returns a report with its full status history, conversation and internal notes", async () => {
+    const at = (s: number) => new Date(Date.UTC(2026, 8, 1, 12, 0, s));
+    const moderator = { id: MOD_ID, email: EMAIL };
+    const update = { id: "clupdate00000000000000001", newStatus: "UNDER_REVIEW", note: "Hidden", visibility: "INTERNAL", createdAt: at(1), moderatorId: MOD_ID, moderator };
+    db.prisma.report.findUnique.mockResolvedValue({
+      id: REPORT_ID,
+      status: "UNDER_REVIEW",
+      awaitingReply: true,
+      statusUpdates: [update],
+      attachments: [],
+      messages: [
+        { id: "clmsg1", authorType: "MODERATOR", body: "Can you say more?", createdAt: at(2), moderator },
+        { id: "clmsg2", authorType: "REPORTER", body: "Yes.", createdAt: at(3), moderator: null },
+      ],
+      internalNotes: [{ id: "clnote1", body: "Check logs", createdAt: at(4), moderator }],
+    });
     const res = await get(REPORT_ID);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(report);
+    const body = await res.json();
+    expect(body).toMatchObject({ id: REPORT_ID, awaitingReply: true, statusUpdates: [expect.objectContaining({ id: update.id })] });
+    expect(body.conversation).toEqual([
+      { type: "status", id: update.id, status: "UNDER_REVIEW", visibility: "INTERNAL", createdAt: at(1).toISOString(), moderator },
+      { type: "message", id: "clmsg1", author: "REVIEW_TEAM", body: "Can you say more?", createdAt: at(2).toISOString(), moderator },
+      { type: "message", id: "clmsg2", author: "REPORTER", body: "Yes.", createdAt: at(3).toISOString(), moderator: null },
+    ]);
+    expect(body.internalNotes).toEqual([
+      { type: "status", id: update.id, status: "UNDER_REVIEW", note: "Hidden", createdAt: at(1).toISOString(), moderator },
+      { type: "note", id: "clnote1", note: "Check logs", createdAt: at(4).toISOString(), moderator },
+    ]);
     expect(db.prisma.report.findUnique.mock.calls[0][0].include).toEqual(moderatorReportDetail);
   });
 

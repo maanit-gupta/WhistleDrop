@@ -17,8 +17,9 @@ import { useModSession } from "./ModShell";
 import mod from "./mod.module.css";
 import styles from "./dashboard.module.css";
 
-// Every number here comes from GET /api/mod/reports: one request per status
-// and per category with pageSize=1, reading `total`. There is no stats endpoint.
+// Every number here comes from GET /api/mod/reports: one request per status,
+// per category and for awaitingReply=true, with pageSize=1, reading `total`.
+// There is no stats endpoint.
 
 const STATUS_CARDS: { status: ReportStatus; title: string; description: string; accent?: boolean }[] = [
   { status: "SUBMITTED", title: "Awaiting Review", description: "New, not picked up yet.", accent: true },
@@ -30,7 +31,11 @@ const STATUS_CARDS: { status: ReportStatus; title: string; description: string; 
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ReportCategory[];
 
+/** The reports list, filtered to cases whose latest message is the reporter's. */
+const AWAITING_REPLY_HREF = `${ROUTES.modReports}?awaitingReply=true`;
+
 interface Stats {
+  awaitingReply: number;
   byStatus: Record<ReportStatus, number>;
   byCategory: Record<ReportCategory, number>;
   recent: ReportListItem[];
@@ -52,7 +57,8 @@ async function fetchStats(signal: AbortSignal): Promise<Stats> {
     if (!result.ok) throw result;
     return result.data.total;
   };
-  const [statusTotals, categoryTotals, recent] = await Promise.all([
+  const [awaitingReply, statusTotals, categoryTotals, recent] = await Promise.all([
+    count({ awaitingReply: true }),
     Promise.all(STATUS_CARDS.map((c) => count({ status: [c.status] }))),
     Promise.all(CATEGORIES.map((c) => count({ category: [c] }))),
     listReports({ sort: "createdAt", order: "desc", pageSize: 10 }, { signal }).then((r) => {
@@ -61,6 +67,7 @@ async function fetchStats(signal: AbortSignal): Promise<Stats> {
     }),
   ]);
   return {
+    awaitingReply,
     byStatus: Object.fromEntries(STATUS_CARDS.map((c, i) => [c.status, statusTotals[i]])) as Stats["byStatus"],
     byCategory: Object.fromEntries(CATEGORIES.map((c, i) => [c, categoryTotals[i]])) as Stats["byCategory"],
     recent,
@@ -140,6 +147,16 @@ function DashboardBody({ stats }: { stats: Stats }) {
               />
             </li>
           ))}
+          <li>
+            <Link href={AWAITING_REPLY_HREF} className={styles.cardLink} aria-label={`Awaiting reply: ${stats.awaitingReply} cases. View them`}>
+              <ServiceCard
+                className={styles.card}
+                title="Awaiting Reply"
+                description="The reporter wrote last. View them →"
+                numeral={<span className="tabular">{stats.awaitingReply.toLocaleString()}</span>}
+              />
+            </Link>
+          </li>
         </ul>
       </section>
 

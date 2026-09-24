@@ -1,6 +1,5 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { generateCaseCode } from "@/lib/caseCode";
+import { createReport } from "@/lib/cases";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { reportSubmissionSchema } from "@/lib/validation";
 import {
@@ -14,15 +13,8 @@ import {
 import { removeObjects } from "@/lib/storage";
 import { apiError, apiSuccess, badRequest, internalError, readJson, validationError } from "@/lib/apiResponse";
 
-const MAX_CREATE_ATTEMPTS = 3;
-
 const uploadErrorResponse = (err: UploadError) =>
   apiError(err.code, err.message, err.code === "UPLOAD_TOKEN_USED" ? 409 : 400);
-
-const isUniqueViolationOn = (err: unknown, field: string) =>
-  err instanceof Prisma.PrismaClientKnownRequestError &&
-  err.code === "P2002" &&
-  JSON.stringify(err.meta?.target ?? "").includes(field);
 
 // PRIVACY: this handler must never read or persist anything that could identify
 // the reporter (IP, headers, cookies, user agent). Only the validated body is
@@ -49,32 +41,20 @@ export async function POST(request: Request) {
     const reportId = newId();
     stored = await storeAttachments(reportId, uploads);
 
-    for (let attempt = 1; ; attempt++) {
-      try {
-        const caseCode = await generateCaseCode();
-        // One transaction: the report, its attachments and the token
-        // consumption either all exist afterwards or none do.
-        await prisma.$transaction([
-          prisma.report.create({ data: { id: reportId, ...report, caseCode } }),
-          prisma.consumedUploadToken.createMany({ data: uploads.map((u) => ({ jti: u.jti })) }),
-          prisma.attachment.createMany({ data: stored.map((a) => ({ ...a, reportId })) }),
-        ]);
+    // One transaction: the report, its attachments and the token consumption
+    // either all exist afterwards or none do.
+    const { caseCode } = await createReport(report, {
+      id: reportId,
+      attachments: stored,
+      consumedTokenIds: uploads.map((u) => u.jti),
+    });
 
-        // Committed: the staging copies are no longer needed. Failure here only
-        // leaves an orphaned staging object; the tokens are already consumed.
-        await removeObjects(uploads.map((u) => u.path)).catch((err) =>
-          console.error("Staging cleanup failed:", err instanceof Error ? err.name : "unknown"),
-        );
-        return apiSuccess({ caseCode }, 201);
-      } catch (err) {
-        // A concurrent submission consumed one of these tokens first.
-        if (isUniqueViolationOn(err, "jti")) {
-          throw new UploadError("UPLOAD_TOKEN_USED", "Upload token has already been used");
-        }
-        // Another request claimed the same case code between check and insert.
-        if (!isUniqueViolationOn(err, "caseCode") || attempt >= MAX_CREATE_ATTEMPTS) throw err;
-      }
-    }
+    // Committed: the staging copies are no longer needed. Failure here only
+    // leaves an orphaned staging object; the tokens are already consumed.
+    await removeObjects(uploads.map((u) => u.path)).catch((err) =>
+      console.error("Staging cleanup failed:", err instanceof Error ? err.name : "unknown"),
+    );
+    return apiSuccess({ caseCode }, 201);
   } catch (err) {
     await discardStoredAttachments(stored);
     if (err instanceof UploadError) return uploadErrorResponse(err);

@@ -88,6 +88,20 @@ describe("Upstash rate limiting", () => {
     expect(key).toMatch(/^[A-Za-z0-9_-]{43}$/); // base64url SHA-256
   });
 
+  it("keys a scoped limit (reporter messages) by an HMAC of the IP and the case code, never either in clear", async () => {
+    const { checkRateLimit, hashClientIp } = await loadWithUpstash();
+    upstash.limit.mockResolvedValue({ success: true, reset: 0 });
+    await checkRateLimit("reporterMessage", request(), "WD-AAAA-BBBB");
+    await checkRateLimit("reporterMessage", request(), "WD-CCCC-DDDD");
+
+    const [[first], [second]] = upstash.limit.mock.calls;
+    expect(first).not.toBe(second);
+    expect(first).not.toBe(hashClientIp(IP));
+    expect(first).not.toContain("WD-AAAA-BBBB");
+    expect(first).not.toContain(IP);
+    expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
   it("returns 503 RATE_LIMITER_UNAVAILABLE if Upstash isn't configured in production, without logging the IP", async () => {
     vi.resetModules();
     vi.stubEnv("NODE_ENV", "production");

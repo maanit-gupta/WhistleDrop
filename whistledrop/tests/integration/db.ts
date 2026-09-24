@@ -9,7 +9,7 @@ export async function resetDatabase() {
   const [{ db }] = await prisma.$queryRaw<{ db: string }[]>`SELECT current_database() AS db`;
   if (!db.endsWith("_test")) throw new Error(`Refusing to truncate database "${db}"`);
 
-  await prisma.$executeRaw`TRUNCATE "StatusUpdate", "Attachment", "ConsumedUploadToken", "Report", "Moderator" RESTART IDENTITY CASCADE`;
+  await prisma.$executeRaw`TRUNCATE "CaseMessage", "InternalNote", "StatusUpdate", "Attachment", "ConsumedUploadToken", "Report", "Moderator" RESTART IDENTITY CASCADE`;
 }
 
 export const MODERATOR = { email: "mod@example.com", password: "integration-test-password" };

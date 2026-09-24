@@ -23,7 +23,7 @@ const PROMISES: Slide[] = [
   {
     label: "Who can see your report",
     statement:
-      "Signed-in moderators, whose access is re-checked on every request. With your case code you see the status and public updates; internal notes and moderator details stay hidden.",
+      "Signed-in moderators, whose access is re-checked on every request. With your case code you see the status and your conversation with the review team; internal notes and moderator details stay hidden.",
     subLabel: "Anyone holding your code can read the report, so keep it private",
     bars: [0.3, 0.52, 0.44, 0.68, 0.36, 0.6, 0.74, 0.48, 0.82, 0.58],
   },

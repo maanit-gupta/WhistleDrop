@@ -16,7 +16,7 @@ export default function TrackPage() {
       <main id="main">
         <PageHeader
           lines={["Track Your Case"]}
-          subline="Enter the case code you were given to see the status and any public updates."
+          subline="Enter the case code you were given to see the status and talk to the review team, anonymously."
         />
         <TrackCase />
       </main>

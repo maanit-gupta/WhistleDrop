@@ -3,11 +3,15 @@ import { z } from "zod";
 import { ModeratorRole, NoteVisibility, ReportCategory, ReportStatus } from "@prisma/client";
 import {
   ALLOWED_UPLOAD_TYPES,
+  caseLookupSchema,
   createModeratorSchema,
   idSchema,
+  internalNoteSchema,
   modReportsQuerySchema,
+  moderatorMessageSchema,
   moderatorLoginSchema,
   reportSubmissionSchema,
+  reporterMessageSchema,
   statusUpdateRequestSchema,
   updateModeratorSchema,
   uploadSignRequestSchema,
@@ -45,6 +49,10 @@ const ModeratorLogin = registry.register("ModeratorLogin", moderatorLoginSchema)
 const StatusUpdateRequest = registry.register("StatusUpdateRequest", statusUpdateRequestSchema);
 const CreateModerator = registry.register("CreateModerator", createModeratorSchema);
 const UpdateModerator = registry.register("UpdateModerator", updateModeratorSchema);
+const CaseLookup = registry.register("CaseLookup", caseLookupSchema);
+const ReporterMessage = registry.register("ReporterMessage", reporterMessageSchema);
+const ModeratorMessage = registry.register("ModeratorMessage", moderatorMessageSchema);
+const InternalNoteRequest = registry.register("InternalNoteRequest", internalNoteSchema);
 
 // Response shapes.
 export const ErrorResponse = registry.register(
@@ -56,6 +64,26 @@ export const PublicStatusUpdate = z.object({
   newStatus: z.enum(ReportStatus),
   createdAt: z.iso.datetime(),
 });
+export const PublicConversationEntry = registry.register(
+  "PublicConversationEntry",
+  z.discriminatedUnion("type", [
+    z.object({
+      type: z.literal("message"),
+      author: z.enum(["REPORTER", "REVIEW_TEAM"]).describe("Moderators appear only as REVIEW_TEAM."),
+      body: z.string(),
+      createdAt: z.iso.datetime(),
+    }),
+    z.object({
+      type: z.literal("status"),
+      status: z.enum(ReportStatus),
+      note: z.string().optional().describe("Present only when the status change had a PUBLIC note."),
+      createdAt: z.iso.datetime(),
+    }),
+  ]),
+);
+export const PublicConversation = z
+  .array(PublicConversationEntry)
+  .describe("Messages and every status change, oldest first. No ids, moderator details or INTERNAL notes.");
 export const PublicReport = registry.register(
   "PublicReport",
   z.object({
@@ -65,8 +93,10 @@ export const PublicReport = registry.register(
     status: z.enum(ReportStatus),
     createdAt: z.iso.datetime(),
     statusUpdates: z.array(PublicStatusUpdate).describe("PUBLIC updates only; no ids or moderator details."),
+    conversation: PublicConversation,
   }),
 );
+export const ReporterMessageCreated = z.object({ conversation: PublicConversation });
 export const ModeratorStatusUpdate = z.object({
   id: z.string(),
   note: z.string().nullable(),
@@ -75,6 +105,34 @@ export const ModeratorStatusUpdate = z.object({
   createdAt: z.iso.datetime(),
   moderatorId: z.string().nullable(),
   moderator: z.object({ id: z.string(), email: z.string() }).nullable(),
+});
+const ModeratorRef = z.object({ id: z.string(), email: z.string() }).nullable();
+export const ModeratorConversationEntry = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("message"),
+    id: z.string(),
+    author: z.enum(["REPORTER", "REVIEW_TEAM"]),
+    body: z.string(),
+    createdAt: z.iso.datetime(),
+    moderator: ModeratorRef.describe("The moderator who wrote a REVIEW_TEAM message; null for the reporter."),
+  }),
+  z.object({
+    type: z.literal("status"),
+    id: z.string(),
+    status: z.enum(ReportStatus),
+    note: z.string().optional().describe("The PUBLIC note, exactly as the reporter sees it."),
+    visibility: z.enum(NoteVisibility),
+    createdAt: z.iso.datetime(),
+    moderator: ModeratorRef,
+  }),
+]);
+export const InternalNoteEntry = z.object({
+  type: z.enum(["note", "status"]).describe("An internal note, or an INTERNAL status update."),
+  id: z.string(),
+  status: z.enum(ReportStatus).optional().describe("For type status: the status the update moved the case to."),
+  note: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  moderator: ModeratorRef,
 });
 export const AttachmentInfo = z.object({
   id: z.string(),
@@ -94,8 +152,13 @@ export const ReportDetail = registry.register(
     createdAt: z.iso.datetime(),
     updatedAt: z.iso.datetime(),
     closedAt: z.iso.datetime().nullable(),
+    awaitingReply: z.boolean(),
     statusUpdates: z.array(ModeratorStatusUpdate),
     attachments: z.array(AttachmentInfo),
+    conversation: z
+      .array(ModeratorConversationEntry)
+      .describe("What the reporter sees, oldest first, plus the moderator behind each entry."),
+    internalNotes: z.array(InternalNoteEntry).describe("Staff only, oldest first. Never shown to the reporter."),
   }),
 );
 export const ReportListItem = z.object({
@@ -106,6 +169,7 @@ export const ReportListItem = z.object({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   closedAt: z.iso.datetime().nullable(),
+  awaitingReply: z.boolean(),
 });
 export const ReportPage = registry.register(
   "ReportPage",
@@ -154,6 +218,9 @@ const e400 = error("Malformed JSON (BAD_REQUEST) or invalid input (VALIDATION_ER
 const e401 = error("Missing, invalid or expired token, or account deactivated (UNAUTHORIZED)");
 const e403 = error("Authenticated, but not an ADMIN (FORBIDDEN)");
 const e404 = error("Not found (NOT_FOUND)");
+const e423Conversation = error(
+  "The case is CLOSED; the conversation is read-only (REPORT_CLOSED, message \"This case is closed. The conversation is read-only.\")",
+);
 const e429 = {
   ...error("Too many requests (RATE_LIMITED)"),
   headers: { "Retry-After": { description: "Seconds until the next request is allowed", schema: { type: "integer" as const } } },
@@ -181,13 +248,41 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: "post",
+  path: "/api/reports/lookup",
+  tags: ["Public"],
+  summary: "Look up a report by case code (preferred)",
+  description: `The case code travels in the body, so it stays out of hosting request logs. Returns the conversation (messages and status changes, PUBLIC notes only) and the PUBLIC status updates. Unknown and malformed codes get the same 404. ${rateLimitNote("lookup")} Shares its budget with GET /api/reports/{caseCode}.`,
+  request: { body: body(CaseLookup) },
+  responses: { 200: json(PublicReport, "The report"), 400: e400, 404: e404, 429: e429, 503: e503, 500: e500 },
+});
+
+registry.registerPath({
   method: "get",
   path: "/api/reports/{caseCode}",
   tags: ["Public"],
-  summary: "Look up a report by case code",
-  description: `Returns PUBLIC status updates only. Unknown and malformed codes get the same 404. ${rateLimitNote("lookup")}`,
+  summary: "Look up a report by case code (kept for compatibility)",
+  description: `Identical response to POST /api/reports/lookup, which is preferred: this form puts the case code in the URL path, where hosting request logs can record it. ${rateLimitNote("lookup")}`,
   request: { params: z.object({ caseCode: z.string() }) },
   responses: { 200: json(PublicReport, "The report"), 404: e404, 429: e429, 503: e503, 500: e500 },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/reports/messages",
+  tags: ["Public"],
+  summary: "Send a message to the review team",
+  description: `Anonymous: nothing about the sender is stored with the message. Marks the case as awaiting a reply. Unknown and malformed codes get the same 404 as the lookup. Rate limited to ${RATE_LIMITS.reporterMessage.limit} messages per ${RATE_LIMITS.reporterMessage.windowSeconds / 60} minutes per client and case code; each request also counts against the lookup budget (${RATE_LIMITS.lookup.limit} per ${RATE_LIMITS.lookup.windowSeconds / 60} minutes per client).`,
+  request: { body: body(ReporterMessage) },
+  responses: {
+    201: json(ReporterMessageCreated, "The updated conversation"),
+    400: e400,
+    404: e404,
+    423: e423Conversation,
+    429: e429,
+    503: e503,
+    500: e500,
+  },
 });
 
 registry.registerPath({
@@ -249,7 +344,7 @@ registry.registerPath({
   tags: ["Moderator"],
   summary: "Change a report's status",
   description:
-    "Allowed: SUBMITTED→UNDER_REVIEW, UNDER_REVIEW→RESOLVED|DISMISSED, RESOLVED|DISMISSED→CLOSED. Closing deletes all evidence files. A CLOSED report is read-only.",
+    "Allowed: SUBMITTED→UNDER_REVIEW, UNDER_REVIEW→RESOLVED|DISMISSED, RESOLVED|DISMISSED→CLOSED. Every status change is shown to the reporter in the conversation; the note only when visibility is PUBLIC. Closing deletes all evidence files and clears awaitingReply; the conversation stays readable. A CLOSED report is read-only.",
   security: secured,
   request: { params: idParam("id"), body: body(StatusUpdateRequest) },
   responses: {
@@ -258,6 +353,42 @@ registry.registerPath({
     401: e401,
     404: e404,
     409: error("Transition not allowed (INVALID_TRANSITION) or changed concurrently (CONFLICT)"),
+    423: error("The report is CLOSED (REPORT_CLOSED)"),
+    500: e500,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/mod/reports/{id}/messages",
+  tags: ["Moderator"],
+  summary: "Reply to the reporter",
+  description: "Visible to the reporter, attributed only to REVIEW_TEAM. Clears awaitingReply.",
+  security: secured,
+  request: { params: idParam("id"), body: body(ModeratorMessage) },
+  responses: {
+    201: json(ReportDetail, "The updated report"),
+    400: e400,
+    401: e401,
+    404: e404,
+    423: e423Conversation,
+    500: e500,
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/mod/reports/{id}/notes",
+  tags: ["Moderator"],
+  summary: "Add an internal note",
+  description: "Always INTERNAL: never visible to the reporter. Use /messages for anything the reporter should see.",
+  security: secured,
+  request: { params: idParam("id"), body: body(InternalNoteRequest) },
+  responses: {
+    201: json(ReportDetail, "The updated report"),
+    400: e400,
+    401: e401,
+    404: e404,
     423: error("The report is CLOSED (REPORT_CLOSED)"),
     500: e500,
   },

@@ -8,8 +8,9 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// PRIVACY: Report and StatusUpdate must never hold data that could identify a
-// reporter (no IP, session ID, device fingerprint, email, user agent, etc.).
+// PRIVACY: Report, StatusUpdate and CaseMessage must never hold data that could
+// identify a reporter (no IP, IP hash, session ID, device fingerprint, email,
+// user agent, etc.).
 
 enum ReportCategory {
   SECURITY
@@ -40,6 +41,13 @@ enum ModeratorRole {
   MODERATOR
 }
 
+enum MessageAuthorType {
+  /// The anonymous reporter, through the case code.
+  REPORTER
+  /// A moderator; shown to the reporter only as "REVIEW_TEAM".
+  MODERATOR
+}
+
 model Report {
   /// Internal only — never expose to reporters; they use caseCode.
   id            String         @id @default(cuid())
@@ -54,8 +62,15 @@ model Report {
   updatedAt     DateTime       @updatedAt
   /// Set when the report moves to CLOSED.
   closedAt      DateTime?
+  /// True while the reporter's latest message has no moderator reply. Set in
+  /// the same transaction as each message; cleared when the case closes.
+  awaitingReply Boolean        @default(false)
   statusUpdates StatusUpdate[]
   attachments   Attachment[]
+  messages      CaseMessage[]
+  internalNotes InternalNote[]
+
+  @@index([awaitingReply])
 }
 
 model StatusUpdate {
@@ -85,6 +100,41 @@ model Moderator {
   isActive      Boolean        @default(true)
   createdAt     DateTime       @default(now())
   statusUpdates StatusUpdate[]
+  caseMessages  CaseMessage[]
+  internalNotes InternalNote[]
+}
+
+/// The conversation between the reporter and the review team. Visible to the
+/// reporter (moderators appear only as "REVIEW_TEAM"). Holds nothing about the
+/// reporter: no IP, no hash, no user agent.
+model CaseMessage {
+  id          String            @id @default(cuid())
+  reportId    String
+  report      Report            @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  authorType  MessageAuthorType
+  /// Set only for MODERATOR messages (a CHECK constraint enforces it).
+  /// Restrict, like StatusUpdate: the staff trail can't be erased.
+  moderatorId String?
+  moderator   Moderator?        @relation(fields: [moderatorId], references: [id], onDelete: Restrict)
+  body        String
+  createdAt   DateTime          @default(now())
+
+  @@index([reportId, createdAt])
+  @@index([moderatorId])
+}
+
+/// Staff-only note on a case. Never visible to the reporter.
+model InternalNote {
+  id          String    @id @default(cuid())
+  reportId    String
+  report      Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  moderatorId String
+  moderator   Moderator @relation(fields: [moderatorId], references: [id], onDelete: Restrict)
+  body        String
+  createdAt   DateTime  @default(now())
+
+  @@index([reportId, createdAt])
+  @@index([moderatorId])
 }
 
 /// Evidence file in the private Supabase Storage bucket. Only files that passed

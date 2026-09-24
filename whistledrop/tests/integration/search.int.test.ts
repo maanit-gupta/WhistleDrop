@@ -58,7 +58,16 @@ describe("GET /api/mod/reports search", () => {
 
   it("returns items with only the list fields", async () => {
     const { items } = await search("?q=0001");
-    expect(Object.keys(items[0]).sort()).toEqual(["caseCode", "category", "closedAt", "createdAt", "id", "status", "updatedAt"]);
+    expect(Object.keys(items[0]).sort()).toEqual([
+      "awaitingReply",
+      "caseCode",
+      "category",
+      "closedAt",
+      "createdAt",
+      "id",
+      "status",
+      "updatedAt",
+    ]);
   });
 });
 

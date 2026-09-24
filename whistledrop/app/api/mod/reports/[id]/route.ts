@@ -1,6 +1,5 @@
-import { prisma } from "@/lib/db";
 import { withModerator } from "@/lib/guards";
-import { moderatorReportDetail } from "@/lib/reports";
+import { findModeratorReport } from "@/lib/cases";
 import { reportIdSchema } from "@/lib/validation";
 import { apiSuccess, internalError, notFound } from "@/lib/apiResponse";
 
@@ -9,7 +8,7 @@ export const GET = withModerator(async (_request: Request, ctx: RouteContext<"/a
   if (!reportIdSchema.safeParse(id).success) return notFound("Report not found");
 
   try {
-    const report = await prisma.report.findUnique({ where: { id }, include: moderatorReportDetail });
+    const report = await findModeratorReport(id);
     if (!report) return notFound("Report not found");
     return apiSuccess(report);
   } catch (err) {

@@ -79,6 +79,29 @@ export function statusUpdateSchemaFor(currentStatus: ReportStatus) {
   });
 }
 
+/** One conversation message or internal note: trimmed, 1–2000 characters, line breaks kept. */
+export const MESSAGE_MAX_CHARS = 2000;
+const messageBody = z.string().trim().min(1).max(MESSAGE_MAX_CHARS);
+
+/**
+ * A case code sent in a request body (never the URL path, so it stays out of
+ * hosting request logs). Only the type and a sanity length are checked here:
+ * a string that isn't a valid code gets the same 404 as an unknown one.
+ */
+const caseCodeField = z.string().max(64);
+
+/** POST /api/reports/lookup */
+export const caseLookupSchema = z.object({ caseCode: caseCodeField }).strict();
+
+/** POST /api/reports/messages: the reporter's side of the conversation. */
+export const reporterMessageSchema = z.object({ caseCode: caseCodeField, body: messageBody }).strict();
+
+/** POST /api/mod/reports/{id}/messages: a reply the reporter will see. */
+export const moderatorMessageSchema = z.object({ body: messageBody }).strict();
+
+/** POST /api/mod/reports/{id}/notes: always INTERNAL; there is no visibility option. */
+export const internalNoteSchema = z.object({ body: messageBody }).strict();
+
 const emailSchema = z.string().trim().toLowerCase().pipe(z.email());
 
 export const moderatorLoginSchema = z
@@ -126,6 +149,11 @@ export const modReportsQuerySchema = z
     order: z.enum(["asc", "desc"]).default("desc"),
     page: z.coerce.number().int().min(1).max(10_000).default(1),
     pageSize: z.coerce.number().int().min(1).max(100).default(20),
+    /** "true": only cases whose latest message is the reporter's; "false": the rest. */
+    awaitingReply: z
+      .enum(["true", "false"])
+      .transform((v) => v === "true")
+      .optional(),
   })
   .strict()
   .refine((q) => !q.from || !q.to || q.from <= q.to, { path: ["from"], message: "from must be on or before to" });

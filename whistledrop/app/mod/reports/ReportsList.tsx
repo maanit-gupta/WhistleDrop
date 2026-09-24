@@ -10,7 +10,13 @@ import { EyebrowTag } from "@/components/ui/EyebrowTag";
 import { HairlineShimmer } from "@/components/ui/HairlineShimmer";
 import { Pagination } from "@/components/ui/Pagination";
 import { StatusTag } from "@/components/ui/StatusTag";
-import { UnderlineDate, UnderlineInput, UnderlineMultiSelect, UnderlineSelect } from "@/components/ui/UnderlineField";
+import {
+  UnderlineCheckbox,
+  UnderlineDate,
+  UnderlineInput,
+  UnderlineMultiSelect,
+  UnderlineSelect,
+} from "@/components/ui/UnderlineField";
 import { listReports, type ReportListItem, type ReportPage, type ReportsQuery } from "@/lib/client/api";
 import { CATEGORY_LABELS, STATUS_LABELS, formatShortDate } from "@/lib/client/labels";
 import { REPORT_STATUSES } from "@/lib/transitions.shared";
@@ -20,7 +26,7 @@ import mod from "../mod.module.css";
 import styles from "./reports.module.css";
 
 // Filters live in the page's query string (status, category, from, to, sort,
-// order, page), so a view survives a refresh and can be shared between
+// order, awaitingReply, page), so a view survives a refresh and can be shared between
 // moderators. The one exception is the search text: it can be a case code,
 // and case codes never go into a URL. It stays in memory (this module), so
 // it survives moving to a report and back, but not a reload.
@@ -41,6 +47,8 @@ interface Filters {
   to: string;
   sort: Sort;
   order: Order;
+  /** Only cases whose latest message is the reporter's. */
+  awaitingReply: boolean;
   page: number;
 }
 
@@ -76,6 +84,7 @@ function parseFilters(params: URLSearchParams): Filters {
     to: date(params.get("to")),
     sort: pick(params.get("sort"), SORTS, "createdAt"),
     order: pick(params.get("order"), ORDERS, "desc"),
+    awaitingReply: params.get("awaitingReply") === "true",
     page: Number.isInteger(page) && page >= 1 && page <= 10000 ? page : 1,
   };
 }
@@ -88,12 +97,27 @@ function toQueryString(f: Filters): string {
   if (f.to) params.set("to", f.to);
   if (f.sort !== "createdAt") params.set("sort", f.sort);
   if (f.order !== "desc") params.set("order", f.order);
+  if (f.awaitingReply) params.set("awaitingReply", "true");
   if (f.page > 1) params.set("page", String(f.page));
   return params.toString();
 }
 
 const columns: DataColumn<ReportListItem>[] = [
-  { key: "code", header: "Case code", cell: (r) => <span className="tabular">{r.caseCode}</span>, width: "20%" },
+  {
+    key: "code",
+    header: "Case code",
+    cell: (r) => (
+      <span className={styles.code}>
+        <span className="tabular">{r.caseCode}</span>
+        {r.awaitingReply && (
+          <EyebrowTag className={styles.replyTag}>
+            Reply<span className="visually-hidden"> needed: the reporter wrote last</span>
+          </EyebrowTag>
+        )}
+      </span>
+    ),
+    width: "24%",
+  },
   { key: "category", header: "Category", cell: (r) => CATEGORY_LABELS[r.category] },
   { key: "status", header: "Status", cell: (r) => <StatusTag status={r.status} /> },
   { key: "created", header: "Created", cell: (r) => formatShortDate(r.createdAt) },
@@ -143,6 +167,7 @@ export function ReportsList() {
       to: filters.to || undefined,
       sort: filters.sort,
       order: filters.order,
+      awaitingReply: filters.awaitingReply || undefined,
       page: filters.page,
       pageSize: PAGE_SIZE,
     }),
@@ -175,7 +200,8 @@ export function ReportsList() {
     filters.from !== "" ||
     filters.to !== "" ||
     filters.sort !== "createdAt" ||
-    filters.order !== "desc";
+    filters.order !== "desc" ||
+    filters.awaitingReply;
 
   const clearFilters = () => {
     setSearch("");
@@ -247,6 +273,13 @@ export function ReportsList() {
           options={ORDER_OPTIONS}
           value={filters.order}
           onChange={(e) => update({ order: e.target.value as Order })}
+        />
+        <UnderlineCheckbox
+          className={styles.awaiting}
+          label="Awaiting reply"
+          hint="The reporter wrote last."
+          checked={filters.awaitingReply}
+          onChange={(e) => update({ awaitingReply: e.target.checked })}
         />
         <div className={styles.clear}>
           <button type="button" className="link-u t-nav" onClick={clearFilters} disabled={!hasFilters}>

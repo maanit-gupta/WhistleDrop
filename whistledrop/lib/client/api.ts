@@ -2,21 +2,28 @@ import type { z } from "zod";
 import type { ApiErrorCode } from "@/lib/apiResponse";
 import type {
   AttachmentDownload as AttachmentDownloadSchema,
+  InternalNoteEntry as InternalNoteEntrySchema,
   LoginResponse as LoginResponseSchema,
   Moderator as ModeratorSchema,
+  ModeratorConversationEntry as ModeratorConversationEntrySchema,
   ModeratorList as ModeratorListSchema,
+  PublicConversationEntry as PublicConversationEntrySchema,
   PublicReport as PublicReportSchema,
   ReportCreated as ReportCreatedSchema,
   ReportDetail as ReportDetailSchema,
   ReportListItem as ReportListItemSchema,
   ReportPage as ReportPageSchema,
+  ReporterMessageCreated as ReporterMessageCreatedSchema,
   UploadSignResponse as UploadSignResponseSchema,
 } from "@/lib/openapi";
 import type {
   createModeratorSchema,
+  internalNoteSchema,
   modReportsQuerySchema,
   moderatorLoginSchema,
+  moderatorMessageSchema,
   reportSubmissionSchema,
+  reporterMessageSchema,
   statusUpdateRequestSchema,
   updateModeratorSchema,
   uploadSignRequestSchema,
@@ -35,8 +42,8 @@ import { clearToken, getToken } from "@/lib/client/session";
 // IndexedDB, cookies), or in console output. This module never logs, never
 // stores a case code, and never puts one anywhere but the lookup request
 // itself. Callers must keep it that way: hold case codes in React state only.
-// (The lookup endpoint takes the code in its request path; see "Open issues"
-// in the contract.)
+// Case codes travel in request bodies (POST /api/reports/lookup and
+// /api/reports/messages), never in a URL path, so hosting logs don't see them.
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -46,6 +53,9 @@ export type LoginInput = z.input<typeof moderatorLoginSchema>;
 export type StatusUpdateInput = z.input<typeof statusUpdateRequestSchema>;
 export type CreateModeratorInput = z.input<typeof createModeratorSchema>;
 export type UpdateModeratorInput = z.input<typeof updateModeratorSchema>;
+export type ReporterMessageInput = z.input<typeof reporterMessageSchema>;
+export type ModeratorMessageInput = z.input<typeof moderatorMessageSchema>;
+export type InternalNoteInput = z.input<typeof internalNoteSchema>;
 
 type ParsedReportsQuery = z.infer<typeof modReportsQuerySchema>;
 /** GET /api/mod/reports filters. Arrays are sent as CSV; dates as YYYY-MM-DD or ISO with offset. */
@@ -59,9 +69,15 @@ export type ReportsQuery = Partial<{
   order: ParsedReportsQuery["order"];
   page: number;
   pageSize: number;
+  /** Only cases whose latest message is the reporter's (true) or the rest (false). */
+  awaitingReply: boolean;
 }>;
 
 export type PublicReport = z.infer<typeof PublicReportSchema>;
+export type PublicConversationEntry = z.infer<typeof PublicConversationEntrySchema>;
+export type ReporterMessageCreated = z.infer<typeof ReporterMessageCreatedSchema>;
+export type ModeratorConversationEntry = z.infer<typeof ModeratorConversationEntrySchema>;
+export type InternalNoteEntry = z.infer<typeof InternalNoteEntrySchema>;
 export type ReportCreated = z.infer<typeof ReportCreatedSchema>;
 export type UploadSignResponse = z.infer<typeof UploadSignResponseSchema>;
 export type LoginResponse = z.infer<typeof LoginResponseSchema>;
@@ -215,11 +231,18 @@ export const submitReport = (body: ReportSubmissionInput, opts?: RequestOptions)
   request<ReportCreated>("POST", "/api/reports", body, opts);
 
 /**
- * GET /api/reports/{caseCode}. Unknown and malformed codes both give 404.
- * The code goes into this fetch's path only; never into the page URL.
+ * POST /api/reports/lookup. Unknown and malformed codes both give 404.
+ * The code goes into the request body only: never a URL, the page's or the API's.
  */
 export const lookupReport = (caseCode: string, opts?: RequestOptions) =>
-  request<PublicReport>("GET", `/api/reports/${segment(caseCode.trim().toUpperCase())}`, undefined, opts);
+  request<PublicReport>("POST", "/api/reports/lookup", { caseCode: caseCode.trim().toUpperCase() }, opts);
+
+/**
+ * POST /api/reports/messages → 201 { conversation }. 404 for an unknown code,
+ * 423 once the case is CLOSED, 429 (with retryAfterSeconds) when rate limited.
+ */
+export const sendReporterMessage = (body: ReporterMessageInput, opts?: RequestOptions) =>
+  request<ReporterMessageCreated>("POST", "/api/reports/messages", body, opts);
 
 /** POST /api/uploads/sign → a Supabase upload URL + token for one file. */
 export const signUpload = (body: UploadSignInput, opts?: RequestOptions) =>
@@ -301,6 +324,14 @@ export const getReport = (id: string, opts?: RequestOptions) =>
 /** PATCH /api/mod/reports/{id}/status. 409 INVALID_TRANSITION / CONFLICT, 423 REPORT_CLOSED. */
 export const updateReportStatus = (id: string, body: StatusUpdateInput, opts?: RequestOptions) =>
   request<ReportDetail>("PATCH", `/api/mod/reports/${segment(id)}/status`, body, opts);
+
+/** POST /api/mod/reports/{id}/messages → 201 ReportDetail. The reporter sees it as REVIEW_TEAM. 423 once CLOSED. */
+export const sendModeratorMessage = (id: string, body: ModeratorMessageInput, opts?: RequestOptions) =>
+  request<ReportDetail>("POST", `/api/mod/reports/${segment(id)}/messages`, body, opts);
+
+/** POST /api/mod/reports/{id}/notes → 201 ReportDetail. Always INTERNAL. 423 once CLOSED. */
+export const addInternalNote = (id: string, body: InternalNoteInput, opts?: RequestOptions) =>
+  request<ReportDetail>("POST", `/api/mod/reports/${segment(id)}/notes`, body, opts);
 
 /** GET a 60-second signed download URL. Call on click; don't prefetch. */
 export const getAttachmentUrl = (reportId: string, attachmentId: string, opts?: RequestOptions) =>

@@ -13,7 +13,7 @@ const STEPS = [
   },
   {
     title: "Review",
-    description: "A moderator moves your report to Under review and may post public updates on it.",
+    description: "A moderator moves your report to Under review and may message you through your case code.",
   },
   {
     title: "Resolution",

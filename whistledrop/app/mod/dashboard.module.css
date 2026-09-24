@@ -1,11 +1,26 @@
 .cards {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 16px;
 }
 
+.cardLink {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-card);
+}
+
+.cardLink > article {
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.cardLink:hover > article,
+.cardLink:focus-visible > article {
+  border-color: var(--lime-500);
+}
+
 /*
- * Five across is narrow for the card's side-by-side head, so the count sits
+ * Six across is narrow for the card's side-by-side head, so the count sits
  * under the title, pinned to the hairline; the hairlines line up across the row.
  */
 .card {

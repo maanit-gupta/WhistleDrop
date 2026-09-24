@@ -19,6 +19,8 @@ export const RATE_LIMITS = {
   uploadSign: { limit: 30, windowSeconds: 60 * 60 },
   /** POST /api/mod/login: slows password guessing. */
   login: { limit: 10, windowSeconds: 15 * 60 },
+  /** POST /api/reports/messages, per client IP and case code. */
+  reporterMessage: { limit: 10, windowSeconds: 60 * 60 },
 } as const;
 
 export type RateLimitName = keyof typeof RATE_LIMITS;
@@ -127,11 +129,16 @@ function getBackend(): Backend {
 /**
  * Applies the named limit to the caller's IP. Returns a 429 response (with
  * Retry-After) when the limit is exceeded, or null when the request may proceed.
+ *
+ * `scope` narrows the bucket to one resource as well as the IP (e.g. a case
+ * code). It is hashed together with the IP, so it never reaches Redis in clear.
  */
-export async function checkRateLimit(name: RateLimitName, request: Request): Promise<Response | null> {
+export async function checkRateLimit(name: RateLimitName, request: Request, scope?: string): Promise<Response | null> {
   let result: LimitResult;
   try {
-    result = await getBackend().limiters[name].limit(hashClientIp(clientIp(request)));
+    const ip = clientIp(request);
+    const key = scope === undefined ? hashClientIp(ip) : hashClientIp(`${ip}\n${scope}`);
+    result = await getBackend().limiters[name].limit(key);
   } catch (err) {
     // Errors fail closed; a slow Redis fails open via `timeout` above. Never
     // log the key or IP.

@@ -10,11 +10,15 @@ import type { ModeratorRole, ReportStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { POST as submitReport } from "@/app/api/reports/route";
 import { GET as lookupReport } from "@/app/api/reports/[caseCode]/route";
+import { POST as lookupReportByBody } from "@/app/api/reports/lookup/route";
+import { POST as postReporterMessage } from "@/app/api/reports/messages/route";
 import { POST as signUpload } from "@/app/api/uploads/sign/route";
 import { POST as login } from "@/app/api/mod/login/route";
 import { GET as listReports } from "@/app/api/mod/reports/route";
 import { GET as getReport } from "@/app/api/mod/reports/[id]/route";
 import { PATCH as patchStatus } from "@/app/api/mod/reports/[id]/status/route";
+import { POST as postModeratorMessage } from "@/app/api/mod/reports/[id]/messages/route";
+import { POST as postInternalNote } from "@/app/api/mod/reports/[id]/notes/route";
 import { GET as getAttachment } from "@/app/api/mod/reports/[id]/attachments/[attachmentId]/route";
 import { GET as listModerators, POST as createModerator } from "@/app/api/admin/moderators/route";
 import { PATCH as updateModerator } from "@/app/api/admin/moderators/[id]/route";
@@ -39,6 +43,20 @@ export const api = {
   lookup: (caseCode: string, ip = "198.51.100.1") =>
     lookupReport(new Request(`${BASE}/api/reports/${caseCode}`, { headers: { "x-forwarded-for": ip } }), {
       params: Promise.resolve({ caseCode }),
+    }),
+  /** POST /api/reports/lookup: the case code in the body. */
+  lookupByBody: (body: unknown, ip = "198.51.100.1") =>
+    lookupReportByBody(jsonRequest("POST", "/api/reports/lookup", body, { "x-forwarded-for": ip })),
+  /** POST /api/reports/messages: the reporter's side of the conversation. */
+  reporterMessage: (body: unknown, ip = "198.51.100.1") =>
+    postReporterMessage(jsonRequest("POST", "/api/reports/messages", body, { "x-forwarded-for": ip })),
+  moderatorMessage: (id: string, body: unknown, headers: Headers = {}) =>
+    postModeratorMessage(jsonRequest("POST", `/api/mod/reports/${id}/messages`, body, headers), {
+      params: Promise.resolve({ id }),
+    }),
+  note: (id: string, body: unknown, headers: Headers = {}) =>
+    postInternalNote(jsonRequest("POST", `/api/mod/reports/${id}/notes`, body, headers), {
+      params: Promise.resolve({ id }),
     }),
   sign: (body: unknown, headers: Headers = {}) => signUpload(jsonRequest("POST", "/api/uploads/sign", body, headers)),
   login: (body: unknown, headers: Headers = {}) => login(jsonRequest("POST", "/api/mod/login", body, headers)),

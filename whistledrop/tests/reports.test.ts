@@ -39,6 +39,7 @@ const db = vi.hoisted(() => {
           createdAt: now,
           updatedAt: now,
           statusUpdates: [],
+          messages: [],
           ...data,
         };
         state.reports.push(row);
@@ -181,14 +182,20 @@ describe("POST /api/reports", () => {
 });
 
 describe("GET /api/reports/:caseCode", () => {
-  it("returns the report and its status history without any internal ids", async () => {
+  it("returns the report, its public history and the conversation without any internal ids", async () => {
     const evidenceUrl = "https://example.com/e";
     const { caseCode } = await (await submit({ ...validReport, evidenceUrl })).json();
     db.state.reports[0].status = "UNDER_REVIEW";
     const moderatorId = "clmoderator00000000000001";
+    const reportId = db.state.reports[0].id;
+    const at = (s: number) => new Date(Date.UTC(2026, 8, 1, 12, 0, s));
     db.state.reports[0].statusUpdates = [
-      { id: "clupdate00000000000000001", reportId: db.state.reports[0].id, newStatus: "UNDER_REVIEW", note: "Looking into it", visibility: "PUBLIC", moderatorId, createdAt: new Date() },
-      { id: "clupdate00000000000000002", reportId: db.state.reports[0].id, newStatus: "UNDER_REVIEW", note: "Internal only", visibility: "INTERNAL", moderatorId, createdAt: new Date() },
+      { id: "clupdate00000000000000001", reportId, newStatus: "UNDER_REVIEW", note: "Looking into it", visibility: "PUBLIC", moderatorId, createdAt: at(1) },
+      { id: "clupdate00000000000000002", reportId, newStatus: "UNDER_REVIEW", note: "Internal only", visibility: "INTERNAL", moderatorId, createdAt: at(3) },
+    ];
+    db.state.reports[0].messages = [
+      { id: "clmessage0000000000000001", reportId, authorType: "MODERATOR", moderatorId, body: "Which server?", createdAt: at(2) },
+      { id: "clmessage0000000000000002", reportId, authorType: "REPORTER", moderatorId: null, body: "The old one.\nRoom 2.", createdAt: at(4) },
     ];
 
     const res = await lookup(caseCode);
@@ -201,9 +208,16 @@ describe("GET /api/reports/:caseCode", () => {
       evidenceUrl,
       status: "UNDER_REVIEW",
       createdAt: expect.any(String),
-      statusUpdates: [{ note: "Looking into it", newStatus: "UNDER_REVIEW", createdAt: expect.any(String) }],
+      statusUpdates: [{ note: "Looking into it", newStatus: "UNDER_REVIEW", createdAt: at(1).toISOString() }],
+      conversation: [
+        { type: "status", status: "UNDER_REVIEW", note: "Looking into it", createdAt: at(1).toISOString() },
+        { type: "message", author: "REVIEW_TEAM", body: "Which server?", createdAt: at(2).toISOString() },
+        // Every status change is shown, but an INTERNAL note never is.
+        { type: "status", status: "UNDER_REVIEW", createdAt: at(3).toISOString() },
+        { type: "message", author: "REPORTER", body: "The old one.\nRoom 2.", createdAt: at(4).toISOString() },
+      ],
     });
-    expect(JSON.stringify(body)).not.toMatch(/clreport|clupdate|clmoderator|reportId|"id"|Internal only|visibility/);
+    expect(JSON.stringify(body)).not.toMatch(/clreport|clupdate|clmoderator|clmessage|reportId|"id"|Internal only|visibility|MODERATOR/);
   });
 
   it("accepts lowercase and whitespace-padded case codes", async () => {

@@ -88,6 +88,10 @@ describe("case-code lookup", () => {
         { newStatus: "UNDER_REVIEW", note: "Assigned to the audit team", createdAt: expect.any(String) },
         { newStatus: "RESOLVED", note: "Contracts re-tendered", createdAt: expect.any(String) },
       ],
+      conversation: [
+        { type: "status", status: "UNDER_REVIEW", note: "Assigned to the audit team", createdAt: expect.any(String) },
+        { type: "status", status: "RESOLVED", note: "Contracts re-tendered", createdAt: expect.any(String) },
+      ],
     });
     expect(JSON.stringify(body)).not.toContain(id);
   });

@@ -68,16 +68,21 @@ export default function PrivacyPage() {
             </p>
             <p>
               <strong>Anyone with the case code</strong> can see the category, description, evidence link, status
-              and public updates. Internal notes, ids and moderator details are never shown. Reporters only ever
-              see the case code, never an internal id.
+              and the conversation with the review team: its messages, every status change and any public note.
+              Internal notes, ids and moderator details are never shown: moderators appear only as &ldquo;the
+              review team&rdquo;. Reporters only ever see the case code, never an internal id.
+            </p>
+            <p>
+              <strong>Messages you send</strong> are stored as text only, with nothing about you: no IP address,
+              no hash of it, no browser details. Don&apos;t put your name or anything that identifies you in them.
             </p>
           </EditorialSection>
 
           <EditorialSection title="When a case closes">
             <p>
               Every evidence file is permanently deleted, and the case becomes read-only. The files are deleted
-              first; if that fails, the case isn&apos;t closed. The report and its history stay available to your
-              case code.
+              first; if that fails, the case isn&apos;t closed. The report and its conversation stay readable with
+              your case code, but no one can add to them.
             </p>
           </EditorialSection>
 
@@ -124,7 +129,7 @@ export default function PrivacyPage() {
                 and the database could match them.
               </li>
               <li>
-                <strong>A leaked case code.</strong> Whoever has it can read the report and its public updates.
+                <strong>A leaked case code.</strong> Whoever has it can read the report and its conversation, and send messages in it.
               </li>
               <li>
                 <strong>Unsent uploads.</strong> A file uploaded without submitting the report stays in private

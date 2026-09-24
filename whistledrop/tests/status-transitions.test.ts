@@ -27,6 +27,8 @@ const db = vi.hoisted(() => {
     ...r,
     statusUpdates: state.updates.filter((u) => u.reportId === r.id),
     attachments: state.attachments.filter((a) => a.reportId === r.id),
+    messages: [],
+    internalNotes: [],
   });
 
   const tx = {
@@ -202,13 +204,17 @@ describe("PATCH /api/mod/reports/:id/status", () => {
     });
   });
 
-  it("sets closedAt and purges attachments (storage objects and rows) when closing", async () => {
+  it("sets closedAt, clears awaitingReply and purges attachments (storage objects and rows) when closing", async () => {
     seedReport("RESOLVED");
     db.state.attachments = [{ id: "clatt", reportId: REPORT_ID, storagePath: `reports/${REPORT_ID}/a.jpg` }];
     simulateBrowserUpload(`reports/${REPORT_ID}/a.jpg`, Buffer.from("img"));
 
     const res = await patch({ newStatus: "CLOSED" });
     expect(res.status).toBe(200);
+    expect(db.tx.report.updateMany).toHaveBeenCalledWith({
+      where: { id: REPORT_ID, status: "RESOLVED" },
+      data: { status: "CLOSED", closedAt: expect.any(Date), awaitingReply: false },
+    });
     expect(db.state.reports.get(REPORT_ID)!.closedAt).toBeInstanceOf(Date);
     expect(db.state.attachments).toEqual([]);
     expect(objects.size).toBe(0);

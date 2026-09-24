@@ -10,22 +10,31 @@ import { LeaveSiteLink } from "@/components/ui/LeaveSiteModal";
 import { RevealHeadline } from "@/components/ui/Reveal";
 import { StatusTimeline, type TimelineEntry } from "@/components/ui/StatusTimeline";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { UnderlineInput } from "@/components/ui/UnderlineField";
-import { lookupReport, type ApiFailure, type PublicReport } from "@/lib/client/api";
+import { UnderlineInput, UnderlineTextarea } from "@/components/ui/UnderlineField";
+import {
+  lookupReport,
+  sendReporterMessage,
+  type ApiFailure,
+  type PublicConversationEntry,
+  type PublicReport,
+} from "@/lib/client/api";
 import { normalizeCaseCode } from "@/lib/client/caseCode";
 import { useCaseCodeHandoff } from "@/lib/client/caseCodeHandoff";
 import { CATEGORY_LABELS, STATUS_LABELS, formatDate, formatWait } from "@/lib/client/labels";
 import styles from "./track.module.css";
 
 // PRIVACY: the case code is held in this component's state only. It goes into
-// the lookup request's path (see the contract's "Open issues") and nowhere
-// else: never the page URL, history, storage or the console.
+// the body of the lookup and message requests and nowhere else: never a URL
+// (the page's or the API's), history, storage or the console.
 
 type View =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "found"; report: PublicReport }
+  | { kind: "found"; report: PublicReport; caseCode: string }
   | { kind: "failed"; title: string; message: string };
+
+const MESSAGE_MAX = 2000;
+const CLOSED_NOTICE = "This case is closed. The conversation is read-only.";
 
 function failureView(failure: ApiFailure): View {
   switch (failure.status) {
@@ -66,7 +75,9 @@ export function TrackCase() {
     const current = new AbortController();
     controller.current = current;
     void lookupReport(code, { signal: current.signal }).then((result) => {
-      if (!current.signal.aborted) setView(result.ok ? { kind: "found", report: result.data } : failureView(result));
+      if (!current.signal.aborted) {
+        setView(result.ok ? { kind: "found", report: result.data, caseCode: code } : failureView(result));
+      }
     });
   };
 
@@ -141,27 +152,44 @@ export function TrackCase() {
           )}
           {view.kind === "loading" && <HairlineShimmer rows={4} label="Looking up your case" />}
           {view.kind === "failed" && <ErrorState title={view.title} message={view.message} />}
-          {view.kind === "found" && <CaseDetails report={view.report} onClear={clear} />}
+          {view.kind === "found" && (
+            <CaseDetails
+              report={view.report}
+              caseCode={view.caseCode}
+              onClear={clear}
+              onReport={(report) => setView({ kind: "found", report, caseCode: view.caseCode })}
+            />
+          )}
         </div>
       </div>
     </section>
   );
 }
 
-function CaseDetails({ report, onClear }: { report: PublicReport; onClear: () => void }) {
-  const closedUpdate =
-    report.status === "CLOSED" ? report.statusUpdates.findLast((u) => u.newStatus === "CLOSED") : undefined;
-
-  // The submission itself has no status update; it starts the timeline.
-  const entries: TimelineEntry[] = [
-    { key: "submitted", status: STATUS_LABELS.SUBMITTED, date: report.createdAt },
-    ...report.statusUpdates.map((u, i) => ({
-      key: `update-${i}`,
-      status: STATUS_LABELS[u.newStatus],
-      note: u.note ?? undefined,
-      date: u.createdAt,
-    })),
+/** The submission, then the conversation: messages and status changes, oldest first. */
+function conversationEntries(report: PublicReport): TimelineEntry[] {
+  const entry = (item: PublicConversationEntry, i: number): TimelineEntry =>
+    item.type === "status"
+      ? { key: `c-${i}`, status: STATUS_LABELS[item.status], note: item.note, date: item.createdAt }
+      : item.author === "REVIEW_TEAM"
+        ? { key: `c-${i}`, status: "Review team", tone: "accent", note: item.body, date: item.createdAt }
+        : { key: `c-${i}`, status: "You", tone: "muted", note: item.body, date: item.createdAt };
+  return [
+    { key: "submitted", status: STATUS_LABELS.SUBMITTED, note: "You sent your report.", date: report.createdAt },
+    ...report.conversation.map(entry),
   ];
+}
+
+interface CaseDetailsProps {
+  report: PublicReport;
+  caseCode: string;
+  onClear: () => void;
+  onReport: (report: PublicReport) => void;
+}
+
+function CaseDetails({ report, caseCode, onClear, onReport }: CaseDetailsProps) {
+  const closedUpdate =
+    report.status === "CLOSED" ? report.conversation.findLast((c) => c.type === "status" && c.status === "CLOSED") : undefined;
 
   const items: InfoItem[] = [
     { label: "Category", value: CATEGORY_LABELS[report.category] },
@@ -193,25 +221,111 @@ function CaseDetails({ report, onClear }: { report: PublicReport; onClear: () =>
       </div>
       <RevealHeadline className={`t-h2 ${styles.detailsTitle}`} lines={["Your Case"]} />
 
-      <div className={styles.detailsGrid}>
-        <div className={styles.timeline}>
-          <h3 className={styles.subheading}>Public updates</h3>
-          <StatusTimeline entries={entries} />
-          {report.statusUpdates.length === 0 && (
-            <EmptyState
-              title="No updates yet"
-              description="A moderator hasn't posted a public update. Check back later with the same code."
-            />
-          )}
-        </div>
-        <div className={styles.facts}>
-          <InfoCard items={items} />
-          <details className={styles.description}>
-            <summary className="t-nav">Show what you wrote</summary>
-            <p>{report.description}</p>
-          </details>
-        </div>
+      <div className={styles.summary}>
+        <InfoCard items={items} />
+        <details className={styles.description}>
+          <summary className="t-nav">Show what you wrote</summary>
+          <p>{report.description}</p>
+        </details>
       </div>
+
+      <section className={styles.conversation} aria-labelledby="track-conversation">
+        <h3 id="track-conversation" className={styles.subheading}>
+          Conversation
+        </h3>
+        <p className={styles.lede}>
+          Messages between you and the review team. Reviewers never see who you are, and you only see them as the
+          review team.
+        </p>
+        <StatusTimeline entries={conversationEntries(report)} currentIndex={-1} />
+        {report.status === "CLOSED" ? (
+          <p className={styles.closed} role="status">
+            {CLOSED_NOTICE}
+          </p>
+        ) : (
+          <ReplyComposer
+            caseCode={caseCode}
+            onSent={(conversation) => onReport({ ...report, conversation })}
+            onClosed={() => onReport({ ...report, status: "CLOSED" })}
+          />
+        )}
+      </section>
     </div>
+  );
+}
+
+interface ReplyComposerProps {
+  caseCode: string;
+  onSent: (conversation: PublicReport["conversation"]) => void;
+  onClosed: () => void;
+}
+
+function ReplyComposer({ caseCode, onSent, onClosed }: ReplyComposerProps) {
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = body.trim();
+    if (!text) {
+      setError("Write a message first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setAnnouncement("");
+    const result = await sendReporterMessage({ caseCode, body: text });
+    setBusy(false);
+    if (result.ok) {
+      setBody("");
+      setAnnouncement("Message sent.");
+      onSent(result.data.conversation);
+      return;
+    }
+    switch (result.status) {
+      case 423:
+        onClosed();
+        return;
+      case 429:
+        setError(`You've sent several messages in a short time. Please try again ${formatWait(result.retryAfterSeconds)}.`);
+        return;
+      case 404:
+        setError("This case can't be found any more. Look it up again with your code.");
+        return;
+      case 400:
+        setError("That message wasn't accepted. It must be 1 to 2,000 characters.");
+        return;
+      case 0:
+        setError(result.message);
+        return;
+      default:
+        setError("Your message wasn't sent. Please try again.");
+    }
+  };
+
+  return (
+    <form className={styles.composer} onSubmit={onSubmit} noValidate aria-label="Reply to the review team">
+      <UnderlineTextarea
+        label="Your reply"
+        hint="Don't include your name or anything that could identify you."
+        maxChars={MESSAGE_MAX}
+        rows={4}
+        value={body}
+        onChange={(e) => {
+          setBody(e.target.value);
+          setError(null);
+        }}
+        error={error ?? undefined}
+        autoComplete="off"
+      />
+      <SubmitButton className={styles.send} loading={busy} loadingLabel="Sending…">
+        Send
+      </SubmitButton>
+      <p className="visually-hidden" aria-live="polite">
+        {announcement}
+      </p>
+    </form>
   );
 }

@@ -53,7 +53,7 @@ export function EntryPoints() {
           <NumberedFeatureRow
             number="02"
             title="Track Your Case"
-            description="Enter the code you were given to see the status and any public updates."
+            description="Enter the code you were given to see the status and reply to the review team."
           >
             <form className={styles.trackForm} onSubmit={track} noValidate>
               <UnderlineInput

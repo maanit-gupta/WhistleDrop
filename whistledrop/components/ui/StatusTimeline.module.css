@@ -59,6 +59,15 @@
   color: var(--lime-ink);
 }
 
+/* Entry tones, for conversations: who is speaking, independent of "current". */
+.status.accent {
+  color: var(--lime-ink);
+}
+
+.status.muted {
+  color: var(--text-muted);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

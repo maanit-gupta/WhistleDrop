@@ -40,3 +40,13 @@ export async function generateCaseCode(): Promise<string> {
   }
   throw new Error("Failed to generate a unique case code");
 }
+
+/**
+ * Trims and upper-cases a code as a reporter might type it, or returns null if
+ * it isn't in the WD-XXXX-XXXX format. Callers answer null exactly like an
+ * unknown code, so malformed and unknown codes can't be told apart.
+ */
+export function normalizeCaseCode(raw: string): string | null {
+  const code = raw.trim().toUpperCase();
+  return CASE_CODE_PATTERN.test(code) ? code : null;
+}

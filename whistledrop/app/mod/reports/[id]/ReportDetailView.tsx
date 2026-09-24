@@ -13,8 +13,18 @@ import { LeaveSiteLink, safeExternalUrl } from "@/components/ui/LeaveSiteModal";
 import { Modal } from "@/components/ui/Modal";
 import { PillCTA } from "@/components/ui/PillCTA";
 import { StatusTimeline, type TimelineEntry } from "@/components/ui/StatusTimeline";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { UnderlineSelect, UnderlineTextarea } from "@/components/ui/UnderlineField";
-import { getAttachmentUrl, getReport, updateReportStatus, type ReportDetail } from "@/lib/client/api";
+import timeline from "@/components/ui/StatusTimeline.module.css";
+import {
+  addInternalNote,
+  getAttachmentUrl,
+  getReport,
+  sendModeratorMessage,
+  updateReportStatus,
+  type ApiResult,
+  type ReportDetail,
+} from "@/lib/client/api";
 import {
   CATEGORY_LABELS,
   STATUS_LABELS,
@@ -24,6 +34,7 @@ import {
 } from "@/lib/client/labels";
 import { nextStatuses } from "@/lib/transitions.shared";
 import { ROUTES } from "@/lib/site";
+import { cx } from "@/components/ui/Action";
 import { useModSession } from "../../ModShell";
 import mod from "../../mod.module.css";
 import styles from "./detail.module.css";
@@ -39,6 +50,7 @@ type Load =
   | { kind: "ready"; report: ReportDetail };
 
 const NOTE_MAX = 2000;
+const MESSAGE_MAX = 2000;
 const VISIBILITY_OPTIONS = [
   { value: "PUBLIC", label: "Public" },
   { value: "INTERNAL", label: "Internal" },
@@ -121,6 +133,10 @@ export function ReportDetailView({ id }: { id: string }) {
 
   const { report } = load;
   const showPanel = report.status !== "CLOSED" || locked;
+  const onLocked = () => {
+    setLocked(true);
+    fetchReport();
+  };
 
   return (
     <main id="main" className={`surface-dark container ${mod.page}`}>
@@ -174,11 +190,54 @@ export function ReportDetailView({ id }: { id: string }) {
 
           <Attachments report={report} />
 
-          <section className={styles.block} aria-labelledby="report-history">
-            <h2 id="report-history" className={mod.subheading}>
-              History
-            </h2>
-            <StatusTimeline entries={timelineEntries(report)} />
+          <section className={styles.block} aria-labelledby="report-conversation">
+            <div className={styles.channelHead}>
+              <h2 id="report-conversation" className={mod.subheading}>
+                Conversation with reporter
+              </h2>
+              <span className={timeline.badge}>Visible to reporter</span>
+            </div>
+            <StatusTimeline entries={conversationEntries(report)} currentIndex={-1} />
+            <Composer
+              report={report}
+              label="Reply to reporter — visible to the reporter"
+              hint="The reporter sees this as a message from the review team, never your name or email."
+              submitLabel="Send reply"
+              variant="reply"
+              send={(body) => sendModeratorMessage(report.id, { body })}
+              onSaved={(updated) => {
+                setLoad({ kind: "ready", report: updated });
+                setAnnouncement("Reply sent to the reporter.");
+              }}
+              onLocked={onLocked}
+            />
+          </section>
+
+          <section className={styles.block} aria-labelledby="report-internal">
+            <div className={styles.channelHead}>
+              <h2 id="report-internal" className={mod.subheading}>
+                Internal notes
+              </h2>
+              <span className={cx(timeline.badge, timeline.internal)}>Staff only</span>
+            </div>
+            {report.internalNotes.length === 0 ? (
+              <p className={styles.muted}>No internal notes yet.</p>
+            ) : (
+              <StatusTimeline entries={internalNoteEntries(report)} currentIndex={-1} />
+            )}
+            <Composer
+              report={report}
+              label="Internal note — never visible to the reporter"
+              hint="Only moderators see internal notes."
+              submitLabel="Add internal note"
+              variant="internal"
+              send={(body) => addInternalNote(report.id, { body })}
+              onSaved={(updated) => {
+                setLoad({ kind: "ready", report: updated });
+                setAnnouncement("Internal note added.");
+              }}
+              onLocked={onLocked}
+            />
           </section>
         </article>
 
@@ -190,10 +249,7 @@ export function ReportDetailView({ id }: { id: string }) {
               setLoad({ kind: "ready", report: updated });
               setAnnouncement(`Status changed to ${STATUS_LABELS[updated.status]}.`);
             }}
-            onLocked={() => {
-              setLocked(true);
-              fetchReport();
-            }}
+            onLocked={onLocked}
             onStale={fetchReport}
           />
         )}
@@ -202,18 +258,115 @@ export function ReportDetailView({ id }: { id: string }) {
   );
 }
 
-function timelineEntries(report: ReportDetail): TimelineEntry[] {
+/** What the reporter sees, oldest first, with the moderator behind each entry. */
+function conversationEntries(report: ReportDetail): TimelineEntry[] {
   return [
-    { key: "submitted", status: STATUS_LABELS.SUBMITTED, date: report.createdAt, author: "Reporter" },
-    ...report.statusUpdates.map((u) => ({
-      key: u.id,
-      status: STATUS_LABELS[u.newStatus],
-      note: u.note ?? undefined,
-      date: u.createdAt,
-      visibility: u.visibility,
-      author: u.moderator?.email ?? "Unknown moderator",
-    })),
+    { key: "submitted", status: STATUS_LABELS.SUBMITTED, note: "Report received.", date: report.createdAt, author: "Reporter" },
+    ...report.conversation.map((c): TimelineEntry =>
+      c.type === "status"
+        ? {
+            key: c.id,
+            status: STATUS_LABELS[c.status],
+            note: c.note,
+            date: c.createdAt,
+            author: c.moderator?.email ?? "Unknown moderator",
+          }
+        : c.author === "REVIEW_TEAM"
+          ? {
+              key: c.id,
+              status: "Review team",
+              tone: "accent",
+              note: c.body,
+              date: c.createdAt,
+              author: c.moderator?.email ?? "Unknown moderator",
+            }
+          : { key: c.id, status: "Reporter", tone: "muted", note: c.body, date: c.createdAt },
+    ),
   ];
+}
+
+/** Staff-only entries: internal notes and the notes on INTERNAL status changes. */
+function internalNoteEntries(report: ReportDetail): TimelineEntry[] {
+  return report.internalNotes.map((n) => ({
+    key: n.id,
+    status: n.type === "status" && n.status ? `Note · ${STATUS_LABELS[n.status]}` : "Note",
+    note: n.note ?? (n.type === "status" ? "Status changed with visibility Internal (no note)." : undefined),
+    date: n.createdAt,
+    author: n.moderator?.email ?? "Unknown moderator",
+  }));
+}
+
+// ── Composers ────────────────────────────────────────────────────────────
+
+interface ComposerProps {
+  report: ReportDetail;
+  label: string;
+  hint: string;
+  submitLabel: string;
+  /** "reply": lime button, the reporter will read it. "internal": outlined block, staff only. */
+  variant: "reply" | "internal";
+  send: (body: string) => Promise<ApiResult<ReportDetail>>;
+  onSaved: (report: ReportDetail) => void;
+  onLocked: () => void;
+}
+
+function Composer({ report, label, hint, submitLabel, variant, send, onSaved, onLocked }: ComposerProps) {
+  const { reportFailure } = useModSession();
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (report.status === "CLOSED") {
+    return <p className={cx(styles.muted, styles.composerClosed)}>This case is closed. The conversation is read-only.</p>;
+  }
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = body.trim();
+    if (!text) {
+      setError("Write something first.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const r = await send(text);
+    setBusy(false);
+    if (r.ok) {
+      setBody("");
+      onSaved(r.data);
+      return;
+    }
+    reportFailure(r);
+    if (r.status === 423) onLocked();
+    else setError(r.message);
+  };
+
+  return (
+    <form className={cx(styles.composer, variant === "internal" && styles.composerInternal)} onSubmit={onSubmit} noValidate>
+      <UnderlineTextarea
+        label={label}
+        hint={hint}
+        maxChars={MESSAGE_MAX}
+        rows={3}
+        value={body}
+        onChange={(e) => {
+          setBody(e.target.value);
+          setError(null);
+        }}
+        error={error ?? undefined}
+        className={styles.note}
+      />
+      {variant === "reply" ? (
+        <SubmitButton loading={busy} loadingLabel="Sending…">
+          {submitLabel}
+        </SubmitButton>
+      ) : (
+        <BlockCTA type="submit" disabled={busy} aria-busy={busy || undefined}>
+          {busy ? "Saving…" : submitLabel}
+        </BlockCTA>
+      )}
+    </form>
+  );
 }
 
 // ── Attachments ──────────────────────────────────────────────────────────
@@ -333,7 +486,7 @@ function ActionPanel({ report, locked, onUpdated, onLocked, onStale }: ActionPan
     setPending(newStatus);
     setError(null);
     const trimmed = note.trim();
-    // Visibility applies to the update itself, note or not: an INTERNAL change stays off the reporter's timeline.
+    // Visibility applies to the note: the reporter always sees the status change, and a PUBLIC note with it.
     const r = await updateReportStatus(report.id, { newStatus, visibility, ...(trimmed ? { note: trimmed } : {}) });
     setPending(null);
     if (r.ok) {
@@ -389,7 +542,7 @@ function ActionPanel({ report, locked, onUpdated, onLocked, onStale }: ActionPan
                     options={VISIBILITY_OPTIONS}
                     value={visibility}
                     onChange={(e) => setVisibility(e.target.value as NoteVisibility)}
-                    hint="Public notes are visible to the reporter."
+                    hint="Status changes are always shown to the reporter. A Public note is shown with it; an Internal one goes to Internal notes."
                   />
                 </div>
               ),
@@ -435,8 +588,9 @@ function ActionPanel({ report, locked, onUpdated, onLocked, onStale }: ActionPan
         }
       >
         <p className={styles.muted}>
-          {visibility === "PUBLIC" ? "The reporter will see this update" : "This update stays internal"}
-          {note.trim() ? ", with your note." : "."}
+          The reporter will see that the case was closed
+          {note.trim() ? (visibility === "PUBLIC" ? ", with your note." : ". Your note stays internal.") : "."} The
+          conversation stays readable, but no one can add to it.
         </p>
       </Modal>
     </aside>
