@@ -1,1 +1,8 @@
-.env
+# Repo-level rules only. App rules live in whistledrop/.gitignore.
+
+# OS files
+.DS_Store
+
+# Local env file at the repo root (never commit secrets)
+/.env
+/.env.*

@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -11,10 +11,12 @@
 !.yarn/versions
 
 # testing
-/coverage
+coverage/
+test-results/
+playwright-report/
 
 # next.js
-/.next/
+.next/
 /out/
 
 # production
@@ -24,24 +26,35 @@
 .DS_Store
 *.pem
 
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
+# logs
+*.log
 
-# env files (can opt-in for committing if needed)
+# env files: never commit secrets. .env.example is the only committed one.
+.env
+.env.local
+.env.*.local
 .env*
+!.env.example
 
 # vercel
-.vercel
+.vercel/
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
+# generated
 /app/generated/prisma
-!.env.example
 
 # Swagger UI assets, copied from node_modules on install
 /public/api-docs/vendor/
+
+# AI / agent tooling
+.agents/
+.agent/
+.claude/
+.cursor/
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+*.skill
