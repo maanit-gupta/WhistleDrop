@@ -58,3 +58,4 @@ AGENTS.md
 CLAUDE.md
 skills-lock.json
 *.skill
+.vercel
