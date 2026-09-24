@@ -12,7 +12,7 @@ An anonymous reporting service. Submit a report without an account, get a case c
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Storage-3ecf8e?logo=supabase&logoColor=white)
 ![Vitest](https://img.shields.io/badge/tested%20with-Vitest-6e9f18?logo=vitest&logoColor=white)
 
-[**Live app**](<LIVE_URL>) · [**API docs**](<LIVE_URL>/api-docs) · [**Full documentation**](whistledrop/README.md) · [**Demo sign-ins**](whistledrop/DUMMY_SIGN_INS.txt)
+[**Live app**](<https://whistle-drop.vercel.app/>) · [**API docs**](<https://whistle-drop.vercel.app/api-docs>) · [**Full documentation**](whistledrop/README.md) · [**Demo sign-ins**](whistledrop/DUMMY_SIGN_INS.txt)
 
 <img src="whistledrop/docs/screenshots/01-home-desktop.png" alt="WhistleDrop home page" width="820">
 
