@@ -1,9 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { UPLOAD_TOKEN_TTL_SECONDS } from "@/lib/auth";
-import { requireEnv } from "@/lib/env";
+import { isDemoMode, requireEnv } from "@/lib/env";
 import { listObjectsWithCreatedAt, removeObjects } from "@/lib/storage";
-import { reassertDemoAccounts } from "@/lib/demo";
+import { purgeStaleDemoReports, reassertDemoAccounts, resetDemoCases } from "@/lib/demo";
 import { apiSuccess, internalError, unauthorized } from "@/lib/apiResponse";
 
 // Daily housekeeping, scheduled in vercel.json. Vercel Cron calls this with
@@ -15,6 +15,9 @@ import { apiSuccess, internalError, unauthorized } from "@/lib/apiResponse";
 //   presented; once older than the token lifetime they are deleted.
 // - The public demo accounts are made active again with their original roles
 //   (the API already refuses to change them; this is the backstop).
+// - Only when DEMO_MODE=true: reports that aren't sample cases and are older
+//   than 24 hours are deleted with their messages, notes and evidence files,
+//   and the WD-DEMO sample cases are rebuilt in their seeded state.
 
 const STAGING_MAX_AGE_MS = 60 * 60 * 1000;
 const REMOVE_BATCH = 100;
@@ -52,7 +55,20 @@ export async function GET(request: Request) {
 
     const demoAccountsReset = await reassertDemoAccounts();
 
-    return apiSuccess({ deletedStagingObjects: stale.length, deletedConsumedUploadTokens: count, demoAccountsReset });
+    let demoReportsDeleted = 0;
+    let demoSamplesReset = 0;
+    if (isDemoMode()) {
+      demoReportsDeleted = await purgeStaleDemoReports(now);
+      demoSamplesReset = await resetDemoCases();
+    }
+
+    return apiSuccess({
+      deletedStagingObjects: stale.length,
+      deletedConsumedUploadTokens: count,
+      demoAccountsReset,
+      demoReportsDeleted,
+      demoSamplesReset,
+    });
   } catch (err) {
     console.error("Cron cleanup failed:", err instanceof Error ? err.message : "unknown");
     return internalError();

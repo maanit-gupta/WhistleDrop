@@ -6,9 +6,11 @@ import {
   addInternalNote,
   changeStatus,
   createReport,
+  deleteReportPermanently,
   postModeratorMessage,
   postReporterMessage,
 } from "@/lib/cases";
+import { isDemoMode } from "@/lib/env";
 
 // Public demo accounts and sample cases, so reviewers can try the moderator
 // and admin features on the live site. The credentials are public by design
@@ -180,6 +182,24 @@ async function runStep(step: Step, report: { id: string; caseCode: string }, ids
   if (result.kind !== "ok") throw new Error(`Demo case ${report.caseCode}: step failed (${result.kind})`);
 }
 
+/** Creates one sample case and plays its steps; removes it again if a step fails. */
+async function buildDemoCase(demo: DemoCase, ids: Record<DemoAccountKey, string>) {
+  const report = await createReport({ category: demo.category, description: demo.description }, { caseCode: demo.caseCode });
+  try {
+    for (const step of demo.steps) {
+      // A few ms apart, so every entry gets its own timestamp and the thread order is fixed.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await runStep(step, report, ids);
+    }
+  } catch (err) {
+    // Don't leave a half-built case behind: a re-run would skip it as "existing".
+    await prisma.report.delete({ where: { id: report.id } }).catch(() => {});
+    throw err;
+  }
+  const { status } = await prisma.report.findUniqueOrThrow({ where: { id: report.id }, select: { status: true } });
+  return status;
+}
+
 /**
  * Creates the sample cases that don't exist yet (idempotent: an existing case
  * code is left as it is). Returns every demo case with whether it was created.
@@ -192,23 +212,68 @@ export async function seedDemoCases(ids: Record<DemoAccountKey, string>) {
       out.push({ caseCode: demo.caseCode, category: demo.category, status: existing.status, created: false });
       continue;
     }
-    const report = await createReport(
-      { category: demo.category, description: demo.description },
-      { caseCode: demo.caseCode },
-    );
-    try {
-      for (const step of demo.steps) {
-        // A few ms apart, so every entry gets its own timestamp and the thread order is fixed.
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        await runStep(step, report, ids);
-      }
-    } catch (err) {
-      // Don't leave a half-built case behind: a re-run would skip it as "existing".
-      await prisma.report.delete({ where: { id: report.id } }).catch(() => {});
-      throw err;
-    }
-    const { status } = await prisma.report.findUniqueOrThrow({ where: { id: report.id }, select: { status: true } });
-    out.push({ caseCode: demo.caseCode, category: demo.category, status, created: true });
+    out.push({ caseCode: demo.caseCode, category: demo.category, status: await buildDemoCase(demo, ids), created: true });
   }
   return out;
+}
+
+// ── DEMO_MODE instance ───────────────────────────────────────────────────
+
+export const DEMO_CASE_CODES: readonly string[] = DEMO_CASES.map((c) => c.caseCode);
+
+/** Reports that aren't sample cases are deleted once they are this old. */
+export const DEMO_REPORT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * seed:demo only runs on a DEMO_MODE instance, unless forced: the demo
+ * accounts' credentials are public, so seeding them anywhere else must be a
+ * deliberate choice. Throws with the reason otherwise.
+ */
+export function assertDemoSeedAllowed(argv: readonly string[]) {
+  if (isDemoMode() || argv.includes("--force")) return;
+  throw new Error(
+    "Refusing to seed demo accounts: DEMO_MODE is not true. Their passwords are public, so only seed them on a " +
+      "demo instance, or pass --force (npm run seed:demo -- --force) if you really mean to.",
+  );
+}
+
+/**
+ * Deletes every report that isn't a sample case and is older than 24 hours,
+ * with its messages, notes and evidence files. Returns how many were deleted.
+ */
+export async function purgeStaleDemoReports(now = Date.now()): Promise<number> {
+  const stale = await prisma.report.findMany({
+    where: { caseCode: { notIn: [...DEMO_CASE_CODES] }, createdAt: { lt: new Date(now - DEMO_REPORT_MAX_AGE_MS) } },
+    select: { id: true },
+  });
+  for (const { id } of stale) await deleteReportPermanently(id);
+  return stale.length;
+}
+
+/**
+ * Puts every sample case back in its seeded state (deleted and rebuilt, so
+ * messages visitors added are gone). Needs the demo accounts, which record the
+ * staff actions; without them nothing is touched. Returns how many were reset.
+ */
+export async function resetDemoCases(): Promise<number> {
+  const accounts = await prisma.moderator.findMany({
+    where: { isDemo: true, email: { in: Object.values(DEMO_ACCOUNTS).map((a) => a.email) } },
+    select: { id: true, email: true },
+  });
+  const ids = {} as Record<DemoAccountKey, string>;
+  for (const key of Object.keys(DEMO_ACCOUNTS) as DemoAccountKey[]) {
+    const account = accounts.find((a) => a.email === DEMO_ACCOUNTS[key].email);
+    if (!account) {
+      console.error("Demo reset skipped: demo accounts missing; run `npm run seed:demo`");
+      return 0;
+    }
+    ids[key] = account.id;
+  }
+
+  for (const demo of DEMO_CASES) {
+    const existing = await prisma.report.findUnique({ where: { caseCode: demo.caseCode }, select: { id: true } });
+    if (existing) await deleteReportPermanently(existing.id);
+    await buildDemoCase(demo, ids);
+  }
+  return DEMO_CASES.length;
 }

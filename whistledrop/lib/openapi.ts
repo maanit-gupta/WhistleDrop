@@ -462,7 +462,7 @@ registry.registerPath({
   tags: ["Internal"],
   summary: "Daily cleanup (Vercel Cron)",
   description:
-    "Deletes staged uploads older than 1 hour and consumed upload-token records older than the 30-minute token lifetime, and restores the demo accounts (active, original roles).",
+    "Deletes staged uploads older than 1 hour and consumed upload-token records older than the 30-minute token lifetime, and restores the demo accounts (active, original roles). With DEMO_MODE=true it also deletes non-sample reports older than 24 hours (with messages, notes and evidence) and resets the sample cases.",
   security: [{ [cronAuth.name]: [] }],
   responses: {
     200: json(
@@ -470,6 +470,8 @@ registry.registerPath({
         deletedStagingObjects: z.number().int(),
         deletedConsumedUploadTokens: z.number().int(),
         demoAccountsReset: z.number().int(),
+        demoReportsDeleted: z.number().int().describe("DEMO_MODE only: non-sample reports older than 24 hours"),
+        demoSamplesReset: z.number().int().describe("DEMO_MODE only: sample cases rebuilt in their seeded state"),
       }),
       "Cleanup summary",
     ),

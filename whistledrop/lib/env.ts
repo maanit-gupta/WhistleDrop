@@ -48,9 +48,32 @@ export function hasUpstashConfig(): boolean {
   );
 }
 
+const demoModeSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.enum(["", "true", "false"]));
+
+/**
+ * DEMO_MODE: "true" marks a public demo instance (banner, acknowledgement on
+ * the report form, daily purge and sample reset in the cron). Unset or "false"
+ * means a normal instance. Any other value throws an EnvError rather than
+ * guessing, so a typo can't silently turn the demo safeguards off.
+ */
+export function isDemoMode(): boolean {
+  const parsed = demoModeSchema.safeParse(process.env.DEMO_MODE ?? "");
+  if (!parsed.success) throw new EnvError('DEMO_MODE must be "true" or "false"');
+  return parsed.data === "true";
+}
+
 /** Every problem with the server environment; empty when all is well. */
 export function validateServerEnv(): string[] {
   const problems = (Object.keys(RULES) as ServerEnvName[]).map(problem).filter((p): p is string => p !== null);
   if (!hasUpstashConfig()) problems.push("UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set");
+  try {
+    isDemoMode();
+  } catch (err) {
+    problems.push((err as Error).message);
+  }
   return problems;
 }

@@ -291,9 +291,11 @@ WhistleDrop **never stores** a reporter's IP address, user agent, cookies, sessi
 
 ### The case-code model
 
-A case code is `WD-` followed by two groups of four characters from `A–Z` and `0–9`, for example `WD-7K2P-Q9XM`. The eight characters come from Node's CSPRNG (`crypto.randomBytes`). Bytes of 252 and above are rejected before taking the value modulo 36, so every character is equally likely. That gives 36⁸, about 2.8 × 10¹² possible codes (about 41 bits). The code is not derived from the report id, the time or the content, and a unique constraint in the database is the final guard against collisions.
+A case code is `WD-` followed by two groups of four characters, for example `WD-7K2P-Q9XM`. Generated codes use `A–Z` and `2–9`: **never `0` or `1`** (they are easily misread as `O` and `I`, and leaving them out keeps generated codes apart from the demo codes below). The eight characters come from Node's CSPRNG (`crypto.randomBytes`). Bytes of 238 and above are rejected before taking the value modulo 34, so every character is equally likely. That gives 34⁸, about 1.8 × 10¹² possible codes (about 40.7 bits). The code is not derived from the report id, the time or the content, and a unique constraint in the database is the final guard against collisions.
 
-Codes are normalised before lookup. In the browser, `lib/client/caseCode.ts` accepts any case, spaces, missing dashes and a missing `WD` prefix, and rebuilds the canonical form, so a mistyped code doesn't use up a lookup. The server trims and uppercases the code, then checks it against `^WD-[A-Z0-9]{4}-[A-Z0-9]{4}$`.
+Codes are normalised before lookup. In the browser, `lib/client/caseCode.ts` accepts any case, spaces, missing dashes and a missing `WD` prefix, and rebuilds the canonical form, so a mistyped code doesn't use up a lookup. The server trims and uppercases the code, then checks it against `^WD-[A-Z0-9]{4}-[A-Z0-9]{4}$`. The accepted format still allows `0` and `1`, so codes issued before the alphabet change keep working.
+
+**Demo codes are intentionally guessable.** The sample cases created by `npm run seed:demo` use the fixed codes `WD-DEMO-0001` to `WD-DEMO-0005`, so the codes in `DUMMY_SIGN_INS.txt` work on every demo deployment. They pass the same normalisation and validation as any code (a unit test checks this), and they exist only for the demo. Because every one of them contains `0` or `1` and generated codes never do, a real report can never be issued a demo code, and the demo reset can never touch one.
 
 The case code is a bearer secret: anyone who has it can read that report's public view. The UI keeps it in React state only. It is never put in the page URL, browser storage or the console, and the downloadable text file's name doesn't contain it.
 
@@ -432,7 +434,7 @@ All request and response bodies are JSON, and every API response has `Cache-Cont
 | `PATCH` | `/api/admin/moderators/:id` | Bearer (ADMIN) | `{ role?, isActive? }` (at least one) | `200 { id, email, role, isActive, isDemo, createdAt }` | 400, 401, 403 `FORBIDDEN` `CANNOT_MODIFY_SELF` `DEMO_ACCOUNT_PROTECTED` `DEMO_ACCOUNT_RESTRICTED`, 404, 409 `LAST_ADMIN`, 500 |
 | `GET` | `/api/openapi` | None | None | `200` OpenAPI 3.1 document | None |
 | `GET` | `/api-docs` | None | None | Swagger UI (HTML) | None |
-| `GET` | `/api/cron/cleanup` | Bearer `CRON_SECRET` | None | `200 { deletedStagingObjects, deletedConsumedUploadTokens, demoAccountsReset }` | 401, 500 |
+| `GET` | `/api/cron/cleanup` | Bearer `CRON_SECRET` | None | `200 { deletedStagingObjects, deletedConsumedUploadTokens, demoAccountsReset, demoReportsDeleted, demoSamplesReset }` (the last two are 0 unless `DEMO_MODE=true`) | 401, 500 |
 
 ### Field rules
 
@@ -736,6 +738,7 @@ cp .env.example .env.local
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token (`KV_REST_API_TOKEN` also works). |
 | `SEED_MODERATOR_EMAIL` | Email of your own first ADMIN account, created by `npm run db:seed`. Keep it out of the repository. |
 | `SEED_MODERATOR_PASSWORD` | Password for that account. Never reuse it anywhere else, and never use a demo password. |
+| `DEMO_MODE` | Optional, `true` or `false` (default `false`; anything else is an error). `true` marks a **public demo instance**: see [Demo mode](#demo-mode). Never set it where real reports live: the daily cron then deletes reports. |
 | `TEST_DATABASE_URL` | Optional. Overrides the integration tests' local Docker database. |
 
 The `db:*`, `storage:setup` and `env:check` scripts load `.env.local` explicitly with `dotenv-cli`. Run `npm run env:check` to validate every server variable at once.
@@ -746,7 +749,7 @@ The `db:*`, `storage:setup` and `env:check` scripts load `.env.local` explicitly
 npm run db:deploy       # apply prisma/migrations (prisma migrate deploy)
 npm run storage:setup   # create or update the private "evidence" bucket (10 MB limit, allowed types only)
 npm run db:seed         # create or restore the ADMIN from SEED_MODERATOR_* (safe to re-run)
-npm run seed:demo       # optional: public demo accounts and sample cases (safe to re-run)
+npm run seed:demo       # optional, demo instances only: public demo accounts and sample cases (needs DEMO_MODE=true, or -- --force)
 ```
 
 To change the schema, edit `prisma/schema.prisma` and create a new migration with `npm run db:migrate -- --name <change>`.
@@ -780,7 +783,7 @@ npm run test:db:down      # stop and discard the test database
 
 - **Unit tests** (`tests/*.test.ts`, with Prisma, Storage and Upstash replaced by fakes): report submission and lookup, including that request headers never reach the database; moderator login and the auth guard on every moderator route; the transition rules and the status route; rate limiting and IP hashing; environment validation; and that the client-side validation matches the server schemas.
 - **Integration tests** (`tests/integration/`, with real Prisma, migrations, transactions and row locks; Storage replaced by an in-memory fake; image sanitizing uses the real sharp): submission and lookup (GET and POST), the conversation (reporter and moderator messages, no moderator identity or INTERNAL notes in the public view, `awaitingReply` toggling and filtering, 423 after close for both sides, a message racing a close, the reporter message rate limit, identical 404s), internal notes, the demo-account protections, the demo seed's idempotency, and the cron's demo-account reset, as well as login, status transitions, closing and read-only enforcement, evidence purge on close, PUBLIC vs INTERNAL notes and the audit trail, search, filters, sorting and pagination, role enforcement and admin self-protection including the last-admin rule, uploads (type, size and magic-byte checks, EXIF removal for JPEG, PNG and WebP, token reuse and rollback), attachment downloads, and the cleanup cron.
-- **End-to-end tests** (`tests/e2e/`, against `next start`): the page CSP nonce matches every script Next.js renders, and API routes and `/api-docs` keep their fixed policies.
+- **End-to-end tests** (`tests/e2e/`, against `next start`, run twice from one build: `DEMO_MODE=false` and `DEMO_MODE=true`): the page CSP nonce matches every script Next.js renders, and API routes and `/api-docs` keep their fixed policies; the demo banner appears on Home, Report and Track (in warm paper and dark ink) only in demo mode; and in demo mode the report form won't submit until the acknowledgement is ticked. The browser tests need Chromium: `npx playwright install chromium` once.
 
 ### Screenshots
 
@@ -800,11 +803,11 @@ This builds the app, starts it on port 3123, creates data **through the real API
    npm run db:deploy
    npm run storage:setup   # once per Supabase project
    npm run db:seed
-   npm run seed:demo       # public demo accounts and sample cases, if you want them
+   npm run seed:demo       # demo instances only (DEMO_MODE=true): public demo accounts and sample cases
    ```
 4. **Environment variables.** Set `DATABASE_URL`, `JWT_SECRET`, `IP_HASH_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and `CRON_SECRET` for the **Production** environment only, with values different from local development. `DIRECT_URL` and the `SEED_*` variables aren't needed on Vercel, because migrations and seeding run locally. `SUPABASE_URL` is read at build time (the API CSP) and at runtime (the page CSP). Run `npm run env:check` against the production values before the first deploy.
 5. **Function region.** Set the function region to **`syd1`** (Sydney) in the project's settings, so functions sit next to Supabase in `ap-southeast-2`. Every query is a network round trip, and a status change makes several in one transaction.
-6. **Cron.** `vercel.json` declares the daily cleanup (`0 3 * * *`, `GET /api/cron/cleanup`), which also resets the demo accounts. Vercel registers it on deploy and sends `Authorization: Bearer $CRON_SECRET` automatically once `CRON_SECRET` is set.
+6. **Cron.** `vercel.json` declares the daily cleanup (`0 3 * * *`, `GET /api/cron/cleanup`), which also resets the demo accounts and, with `DEMO_MODE=true`, purges visitor reports and resets the sample cases. Vercel registers it on deploy and sends `Authorization: Bearer $CRON_SECRET` automatically once `CRON_SECRET` is set.
 7. **Analytics off.** Vercel Web Analytics and Speed Insights stay disabled for the project. Neither package is installed, and the CSP would block their scripts anyway.
 
 ## Demo accounts
@@ -817,7 +820,7 @@ So reviewers can try the moderator and admin features on the live site, `npm run
 | `aria@whistledrop.demo` | MODERATOR |
 | `kiran@whistledrop.demo` | MODERATOR |
 
-It also creates five fictional sample cases with fixed codes, `WD-DEMO-0001` to `WD-DEMO-0005`, one per status, including an ongoing conversation (`0001`, awaiting reply) and a closed case whose conversation stays readable (`0003`). They are built through the same service functions the API uses (`lib/cases.ts`), not raw SQL. The script is idempotent: it restores the accounts' passwords, roles and active status, and leaves existing sample cases alone.
+Run it only on a [demo-mode](#demo-mode) instance: without `DEMO_MODE=true` it refuses unless given `-- --force`. It also creates five fictional sample cases with fixed, deliberately guessable codes, `WD-DEMO-0001` to `WD-DEMO-0005` (see [The case-code model](#the-case-code-model)), one per status, including an ongoing conversation (`0001`, awaiting reply) and a closed case whose conversation stays readable (`0003`). They are built through the same service functions the API uses (`lib/cases.ts`), not raw SQL. The script is idempotent: it restores the accounts' passwords, roles and active status, and leaves existing sample cases alone.
 
 Because anyone can sign in as these accounts, the server protects them (`Moderator.isDemo`):
 
@@ -826,12 +829,24 @@ Because anyone can sign in as these accounts, the server protects them (`Moderat
 - A demo admin can create only `MODERATOR` accounts, so it can't mint a non-demo ADMIN.
 - The daily cron (`/api/cron/cleanup`) makes every demo account active again with its original role.
 
+### Demo mode
+
+Set `DEMO_MODE=true` on a deployment that exists only as a public demo. It is read at request time, and it is validated: only `true` or `false` are accepted (`npm run env:check` reports anything else, and the pages and cron refuse to guess). With it on:
+
+1. **Banner.** Home, Report and Track show a slim notice pinned to the top, in warm paper and dark ink (never lime, so it can't look like an action): *"Public demo. Reports here are visible to anyone using the demo moderator accounts. Do not submit real information."* The page is pushed down by the banner's height, so nothing is hidden behind it.
+2. **Acknowledgement.** The report form won't submit until the reporter ticks *"I understand this is a demo and I'm not submitting real information."* (a UI safeguard; nothing extra is sent to the API).
+3. **Daily purge and reset.** `/api/cron/cleanup` also deletes every report that isn't a sample case and is older than 24 hours, with its messages, notes and evidence files (storage first, then the rows, so a storage failure deletes nothing and is retried the next day). It then rebuilds the five `WD-DEMO` sample cases in their seeded state, discarding whatever visitors added. The response reports `demoReportsDeleted` and `demoSamplesReset`.
+
+With `DEMO_MODE` unset or `false`, none of this happens: no banner, no checkbox, no deletion, and `npm run seed:demo` refuses to run unless you pass `-- --force`, because the demo passwords are public.
+
+### Retiring an account
+
 To retire a real account (moderators with history can't be deleted), deactivate it: `npm run account:deactivate -- <email>` (`scripts/deactivate-account.ts`). It refuses demo accounts and the last active ADMIN.
 
 ## Design decisions and assumptions
 
 - **CSP nonces rather than hashes or `'unsafe-inline'`.** Next.js injects inline bootstrap scripts that change per build and per page, and it supports reading a per-request nonce. The price is that every page renders on demand (a prerendered page would carry no nonce), which is acceptable for this app's traffic.
-- **The chosen rate limits.** 30 lookups per 15 minutes is plenty for a reporter checking a case, but against about 2.8 × 10¹² codes it makes guessing hopeless. 10 submissions per hour allows genuine use while slowing spam. 30 upload signatures per hour covers three files per report with retries. 10 login attempts per 15 minutes slows password guessing without locking out a moderator who mistypes.
+- **The chosen rate limits.** 30 lookups per 15 minutes is plenty for a reporter checking a case, but against about 1.8 × 10¹² codes it makes guessing hopeless. 10 submissions per hour allows genuine use while slowing spam. 30 upload signatures per hour covers three files per report with retries. 10 login attempts per 15 minutes slows password guessing without locking out a moderator who mistypes.
 - **ConsumedUploadToken.** Upload tokens are stateless JWTs, so something has to remember which ones were used. A table holding only random ids, deleted once the tokens have expired, gives single use without linking anything to a report or a person.
 - **The moderator deletion restriction.** Deleting a moderator would either erase their part in the audit trail or leave orphaned history, so accounts with history can only be deactivated. The database enforces this, not just the API.
 - **OpenAPI generated from the existing Zod schemas.** The schemas that validate requests also produce the spec, so the docs describe exactly what the API accepts.
@@ -846,7 +861,7 @@ To retire a real account (moderators with history can't be deleted), deactivate 
 - **The reporter's network provider can still see the site visit.** ISPs, workplace or campus networks and the hosting platform can see that a device connected to WhistleDrop. At-risk reporters should use Tor or a trusted VPN from a device and network that aren't monitored.
 - **The legacy GET lookup puts case codes in request logs.** The Track page uses the POST routes, but `GET /api/reports/{caseCode}` still exists for compatibility, and anyone calling it puts the code in a logged path.
 - **Messages are free text.** A reporter can still identify themselves in what they write; the UI warns them, but nothing can stop it. Messages can't be edited or deleted.
-- **Demo accounts can read every report.** On a deployment with the demo accounts seeded, anyone can sign in as a moderator, so only fictional data should live there. Demo accounts are limited only in account management, not in case access.
+- **Demo accounts can read every report.** On a deployment with the demo accounts seeded, anyone can sign in as a moderator, so only fictional data should live there: run it with `DEMO_MODE=true`, which warns reporters and deletes their reports after a day. Demo accounts are limited only in account management, not in case access.
 - **Content can identify its author.** A description, writing style or the evidence itself can give a reporter away, and `createdAt` is stored to the millisecond, so someone who could see both platform logs and the database could try to match them.
 - **Rate-limit windows reset at 00:00 UTC**, because the IP hash's salt rotates daily. Everyone behind one shared IP (a campus network or a Tor exit) also shares one budget.
 - **The rate limiter trusts `X-Forwarded-For`.** That's correct behind Vercel. Exposed directly, clients could forge the header.

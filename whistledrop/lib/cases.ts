@@ -216,3 +216,24 @@ export async function addInternalNote(id: string, moderatorId: string, body: str
     return { kind: "ok", report: toModeratorDetail(report) };
   }, TRANSACTION_OPTIONS);
 }
+
+// ── Deletion (demo instances only) ───────────────────────────────────────
+
+/**
+ * Permanently deletes a report: its evidence files first (the rows' paths plus
+ * anything else under reports/<id>/), then the report, whose status updates,
+ * messages, notes and attachment rows cascade. If storage fails nothing is
+ * deleted, so the next run retries. Only the DEMO_MODE cleanup uses this;
+ * real reports are closed, never deleted.
+ */
+export async function deleteReportPermanently(id: string): Promise<void> {
+  const report = await prisma.report.findUnique({
+    where: { id },
+    select: { attachments: { select: { storagePath: true } } },
+  });
+  if (!report) return;
+  const paths = new Set(report.attachments.map((a) => a.storagePath));
+  for (const path of await listObjects(`reports/${id}`)) paths.add(path);
+  await removeObjects([...paths]);
+  await prisma.report.deleteMany({ where: { id } });
+}

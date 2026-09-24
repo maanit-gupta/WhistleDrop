@@ -6,7 +6,7 @@ import { FileDropzone, type DropzoneFile } from "@/components/ui/FileDropzone";
 import { InfoCard } from "@/components/ui/InfoCard";
 import { RevealHeadline } from "@/components/ui/Reveal";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { UnderlineInput, UnderlineSelect, UnderlineTextarea } from "@/components/ui/UnderlineField";
+import { UnderlineCheckbox, UnderlineInput, UnderlineSelect, UnderlineTextarea } from "@/components/ui/UnderlineField";
 import { signUpload, submitReport, uploadToSignedUrl, type ApiFailure } from "@/lib/client/api";
 import { CATEGORY_LABELS, formatWait } from "@/lib/client/labels";
 import {
@@ -26,7 +26,7 @@ import styles from "./report.module.css";
 // only. It is never logged, stored, or put in a URL.
 
 type UploadMimeType = (typeof ALLOWED_UPLOAD_TYPES)[number];
-type Field = ReportFormField | "files";
+type Field = ReportFormField | "files" | "acknowledge";
 type FieldErrors = Partial<Record<Field, string>>;
 
 interface Upload extends DropzoneFile {
@@ -53,7 +53,11 @@ const SERVER_FIELD_MESSAGES: Record<Field, string> = {
   description: `Write between ${DESCRIPTION_MIN} and ${DESCRIPTION_MAX.toLocaleString("en")} characters.`,
   evidenceUrl: "Enter a full link starting with http:// or https://.",
   files: "One of the files couldn't be attached. Remove it and try again.",
+  acknowledge: "",
 };
+
+export const DEMO_ACKNOWLEDGEMENT = "I understand this is a demo and I'm not submitting real information.";
+const ACKNOWLEDGE_ID = "report-demo-acknowledge";
 
 interface FormError {
   title: string;
@@ -89,10 +93,16 @@ function serverField(message: string): Field | null {
 
 let uploadCounter = 0;
 
-export function ReportForm() {
+export interface ReportFormProps {
+  /** DEMO_MODE instance: the reporter must tick the demo acknowledgement before submitting. */
+  demoMode?: boolean;
+}
+
+export function ReportForm({ demoMode = false }: ReportFormProps) {
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<FormError | null>(null);
@@ -111,7 +121,7 @@ export function ReportForm() {
 
   const focusField = (field: Field) => {
     if (field === "files") return;
-    document.getElementById(FIELD_IDS[field])?.focus();
+    document.getElementById(field === "acknowledge" ? ACKNOWLEDGE_ID : FIELD_IDS[field])?.focus();
   };
 
   /** Signs and uploads every file that has no usable token yet. Returns the tokens, or null on failure. */
@@ -153,14 +163,16 @@ export function ReportForm() {
       description,
       evidenceUrl: trimmedUrl === "" ? undefined : trimmedUrl,
     });
-    if (!parsed.success) {
+    const needsAcknowledgement = demoMode && !acknowledged;
+    if (!parsed.success || needsAcknowledgement) {
       const next: FieldErrors = {};
-      for (const issue of parsed.error.issues) {
+      for (const issue of parsed.success ? [] : parsed.error.issues) {
         const field = issue.path[0] as ReportFormField;
         next[field] ??= issue.message;
       }
+      if (needsAcknowledgement) next.acknowledge = "Tick this box to confirm before submitting.";
       setErrors(next);
-      const first = (["category", "description", "evidenceUrl"] as const).find((f) => next[f]);
+      const first = (["category", "description", "evidenceUrl", "acknowledge"] as const).find((f) => next[f]);
       if (first) focusField(first);
       return;
     }
@@ -315,6 +327,20 @@ export function ReportForm() {
                   maxBytes={MAX_UPLOAD_BYTES}
                   disabled={busy}
                 />
+
+                {demoMode && (
+                  <UnderlineCheckbox
+                    id={ACKNOWLEDGE_ID}
+                    label={DEMO_ACKNOWLEDGEMENT}
+                    required
+                    checked={acknowledged}
+                    onChange={(e) => {
+                      setAcknowledged(e.target.checked);
+                      clearError("acknowledge");
+                    }}
+                    error={errors.acknowledge}
+                  />
+                )}
 
                 {formError && <ErrorState title={formError.title} message={formError.message} className={styles.formError} />}
 

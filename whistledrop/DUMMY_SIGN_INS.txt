@@ -64,6 +64,10 @@ can't be changed through the API by anyone, and they can't change other
 accounts' role or status. They are reset daily: the scheduled cleanup job
 makes every demo account active again with its original role.
 
-Sample cases are created once by `npm run seed:demo` and are not reset, so
-you may see messages other reviewers have added. Please don't enter real
-personal information anywhere on the demo site.
+The demo site runs with DEMO_MODE=true, so the same daily job also puts the
+five sample cases back in their original state and deletes any other report
+older than 24 hours, with its messages, notes and files. Until then you may
+see messages other reviewers have added.
+
+The WD-DEMO codes are deliberately guessable and exist only for the demo.
+Please don't enter real personal information anywhere on the demo site.

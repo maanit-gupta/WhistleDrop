@@ -21,6 +21,7 @@ const JWT_SECRET = "test-secret-that-is-at-least-32-characters-long";
 const IP_HASH_SECRET = "test-ip-hash-secret-at-least-32-characters";
 const CRON_SECRET = "test-cron-secret-that-is-at-least-32-chars";
 const E2E_PORT = 3481;
+const E2E_DEMO_PORT = 3482;
 
 // Integration tests only ever talk to this disposable database (see
 // compose.test.yml and tests/integration/globalSetup.ts), never Supabase.
@@ -71,7 +72,15 @@ export default defineConfig({
           // Starts the production build (`next start`); run `next build` first
           // (npm run test:e2e does both).
           globalSetup: ["tests/e2e/globalSetup.ts"],
-          env: { E2E_BASE_URL: `http://127.0.0.1:${E2E_PORT}`, E2E_PORT: String(E2E_PORT) },
+          env: {
+            E2E_BASE_URL: `http://127.0.0.1:${E2E_PORT}`,
+            E2E_PORT: String(E2E_PORT),
+            // Same build with DEMO_MODE=true (tests/e2e/globalSetup.ts).
+            E2E_DEMO_BASE_URL: `http://127.0.0.1:${E2E_DEMO_PORT}`,
+            E2E_DEMO_PORT: String(E2E_DEMO_PORT),
+          },
+          // The browser tests start Chromium; allow for a cold start.
+          testTimeout: 30_000,
         },
       },
     ],

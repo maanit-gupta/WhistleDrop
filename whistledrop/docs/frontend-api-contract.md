@@ -295,7 +295,7 @@ There is **no delete endpoint**: moderators are deactivated, never deleted.
 
 | Endpoint | Why |
 | --- | --- |
-| `GET /api/cron/cleanup` | Vercel Cron only (`Bearer $CRON_SECRET`). Also restores demo accounts (active, original roles). |
+| `GET /api/cron/cleanup` | Vercel Cron only (`Bearer $CRON_SECRET`). Also restores demo accounts (active, original roles), and with `DEMO_MODE=true` deletes non-sample reports older than 24 hours and resets the `WD-DEMO` samples. |
 | `GET /api/openapi`, `/api-docs` | API documentation |
 
 ## Where this differs from the Part 1 brief
@@ -318,6 +318,12 @@ There is **no delete endpoint**: moderators are deactivated, never deleted.
   was closed in the meantime).
 - The reports page keeps filters in its query string (including `awaitingReply=true`), except the search
   text (`q`), which can be a case code and so stays in memory only.
+
+## Demo mode (`DEMO_MODE=true`)
+
+- The Home, Report and Track pages render `DemoBanner` (server-side check of `isDemoMode()` in `lib/env.ts`).
+- `ReportForm` gets `demoMode` from its page and then requires the acknowledgement checkbox before it calls
+  `POST /api/reports`. The API itself is unchanged: nothing extra is sent.
 
 ## Conversation UI notes
 

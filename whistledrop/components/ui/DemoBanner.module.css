@@ -1,0 +1,35 @@
+/* Before hydration measures it: roughly one line on wide screens, three on phones. */
+:global(html):has(.banner) {
+  --demo-banner-height: 36px;
+}
+
+@media (max-width: 767px) {
+  :global(html):has(.banner) {
+    --demo-banner-height: 60px;
+  }
+}
+
+/* The page starts below the banner, so nothing is hidden behind it. */
+:global(body):has(.banner) {
+  padding-top: var(--demo-banner-height);
+}
+
+.banner {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 900;
+  padding: 9px var(--page-inset, 16px);
+  background: var(--paper-warm);
+  color: var(--ink-950);
+  border-bottom: 1px solid var(--ink-950);
+}
+
+.text {
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-align: center;
+}

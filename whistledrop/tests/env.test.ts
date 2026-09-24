@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EnvError, requireEnv, validateServerEnv } from "@/lib/env";
+import { EnvError, isDemoMode, requireEnv, validateServerEnv } from "@/lib/env";
 
 const STRONG = "x".repeat(32);
 
@@ -47,5 +47,30 @@ describe("validateServerEnv", () => {
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://x.upstash.io");
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "token");
     expect(validateServerEnv()).toEqual([]);
+  });
+});
+
+describe("DEMO_MODE", () => {
+  it("defaults to false when unset or empty", () => {
+    vi.stubEnv("DEMO_MODE", undefined);
+    expect(isDemoMode()).toBe(false);
+    vi.stubEnv("DEMO_MODE", "");
+    expect(isDemoMode()).toBe(false);
+  });
+
+  it.each([
+    ["true", true],
+    [" TRUE ", true],
+    ["false", false],
+    ["False", false],
+  ])("reads %j as %s", (value, expected) => {
+    vi.stubEnv("DEMO_MODE", value);
+    expect(isDemoMode()).toBe(expected);
+  });
+
+  it.each(["yes", "1", "on", "treu"])("rejects %j instead of guessing, and validateServerEnv reports it", (value) => {
+    vi.stubEnv("DEMO_MODE", value);
+    expect(() => isDemoMode()).toThrow(EnvError);
+    expect(validateServerEnv().join("\n")).toContain('DEMO_MODE must be "true" or "false"');
   });
 });

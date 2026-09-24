@@ -1,12 +1,14 @@
 // Demo accounts and sample cases for reviewers: npm run seed:demo
 // Idempotent: accounts are created or restored (password, role, active), and
 // sample cases that already exist are left alone.
+// Refuses to run unless DEMO_MODE=true, or --force is passed
+// (npm run seed:demo -- --force).
 //
 // These passwords are PUBLIC BY DESIGN: they are listed in DUMMY_SIGN_INS.txt
 // so anyone can try the moderator and admin features. They are used for
 // nothing else. The server protects these accounts (lib/demo.ts).
 import { prisma } from "../lib/db";
-import { DEMO_ACCOUNTS, seedDemoAccounts, seedDemoCases, type DemoAccountKey } from "../lib/demo";
+import { DEMO_ACCOUNTS, assertDemoSeedAllowed, seedDemoAccounts, seedDemoCases, type DemoAccountKey } from "../lib/demo";
 
 const DEMO_PASSWORDS: Record<DemoAccountKey, string> = {
   admin: "Demo-Admin-Lantern-2026",
@@ -15,6 +17,12 @@ const DEMO_PASSWORDS: Record<DemoAccountKey, string> = {
 };
 
 async function main() {
+  try {
+    assertDemoSeedAllowed(process.argv.slice(2));
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
   const ids = await seedDemoAccounts(DEMO_PASSWORDS);
   console.log("Demo accounts (public by design; see DUMMY_SIGN_INS.txt):");
   for (const key of Object.keys(DEMO_ACCOUNTS) as DemoAccountKey[]) {

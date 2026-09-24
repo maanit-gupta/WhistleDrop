@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { DemoBanner } from "@/components/ui/DemoBanner";
 import { NavPill } from "@/components/ui/NavPill";
+import { isDemoMode } from "@/lib/env";
 import { Footer } from "@/components/sections/Footer";
 import { PageHeader } from "@/components/sections/PageHeader";
 import { TrackCase } from "./TrackCase";
@@ -10,8 +12,10 @@ export const metadata: Metadata = {
 };
 
 export default function TrackPage() {
+  const demoMode = isDemoMode();
   return (
     <>
+      {demoMode && <DemoBanner />}
       <NavPill />
       <main id="main">
         <PageHeader

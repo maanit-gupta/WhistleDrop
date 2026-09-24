@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { ReportCategory } from "@prisma/client";
 import * as server from "@/lib/validation";
 import * as client from "@/lib/validation.client";
-import { CASE_CODE_PATTERN as SERVER_CASE_CODE_PATTERN, formatCaseCode } from "@/lib/caseCode";
+import {
+  CASE_CODE_ALPHABET,
+  CASE_CODE_PATTERN as SERVER_CASE_CODE_PATTERN,
+  formatCaseCode,
+  normalizeCaseCode as normalizeServerCaseCode,
+} from "@/lib/caseCode";
 import { CASE_CODE_PATTERN, normalizeCaseCode } from "@/lib/client/caseCode";
 import { formatWait } from "@/lib/client/labels";
 
@@ -75,6 +80,24 @@ describe("normalizeCaseCode", () => {
       const code = formatCaseCode();
       expect(normalizeCaseCode(code.toLowerCase().replaceAll("-", ""))).toBe(code);
     }
+  });
+});
+
+describe("demo sample codes (WD-DEMO-0001 … 0005)", () => {
+  const DEMO_CODES = ["WD-DEMO-0001", "WD-DEMO-0002", "WD-DEMO-0003", "WD-DEMO-0004", "WD-DEMO-0005"];
+
+  it.each(DEMO_CODES)("%s passes client normalization and server validation", (code) => {
+    expect(normalizeCaseCode(code)).toBe(code);
+    expect(normalizeCaseCode(code.toLowerCase().replaceAll("-", ""))).toBe(code);
+    expect(normalizeCaseCode(code.slice(3))).toBe(code); // without the WD- prefix
+    expect(normalizeServerCaseCode(` ${code.toLowerCase()} `)).toBe(code);
+    expect(SERVER_CASE_CODE_PATTERN.test(code)).toBe(true);
+  });
+
+  it("can never be generated: generated codes contain no 0 or 1", () => {
+    expect(CASE_CODE_ALPHABET).not.toMatch(/[01]/);
+    expect(CASE_CODE_ALPHABET).toHaveLength(34);
+    for (let i = 0; i < 2000; i++) expect(formatCaseCode()).toMatch(/^WD-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
   });
 });
 

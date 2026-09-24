@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { DemoBanner } from "@/components/ui/DemoBanner";
 import { NavPill } from "@/components/ui/NavPill";
+import { isDemoMode } from "@/lib/env";
 import { Footer } from "@/components/sections/Footer";
 import { PageHeader } from "@/components/sections/PageHeader";
 import { DiagonalRibbons } from "@/components/visuals/DiagonalRibbons";
@@ -12,8 +14,10 @@ export const metadata: Metadata = {
 };
 
 export default function ReportPage() {
+  const demoMode = isDemoMode();
   return (
     <>
+      {demoMode && <DemoBanner />}
       <NavPill />
       <main id="main">
         <PageHeader
@@ -25,7 +29,7 @@ export default function ReportPage() {
         <div className={styles.ribbons}>
           <DiagonalRibbons parallax="soft" />
         </div>
-        <ReportForm />
+        <ReportForm demoMode={demoMode} />
       </main>
       <Footer />
     </>

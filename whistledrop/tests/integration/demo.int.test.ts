@@ -1,11 +1,19 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/db";
 import { resetRateLimitsForTests } from "@/lib/rateLimit";
-import { DEMO_ACCOUNTS, DEMO_CASES, reassertDemoAccounts, seedDemoAccounts, seedDemoCases } from "@/lib/demo";
+import {
+  DEMO_ACCOUNTS,
+  DEMO_CASES,
+  assertDemoSeedAllowed,
+  reassertDemoAccounts,
+  resetDemoCases,
+  seedDemoAccounts,
+  seedDemoCases,
+} from "@/lib/demo";
 import { GET as cleanup } from "@/app/api/cron/cleanup/route";
-import { resetFakeStorage } from "../helpers/fakeStorage";
+import { pathsUnder, resetFakeStorage } from "../helpers/fakeStorage";
 import { resetDatabase } from "./db";
-import { api, authHeaders, createAccount } from "./api";
+import { api, authHeaders, createAccount, createReport, imageWithExif, tinyPdf, uploadFile } from "./api";
 
 vi.mock("@/lib/storage", () => import("../helpers/fakeStorage"));
 
@@ -13,6 +21,10 @@ beforeEach(async () => {
   await resetDatabase();
   resetRateLimitsForTests();
   resetFakeStorage();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 afterAll(async () => {
@@ -230,5 +242,160 @@ describe("demo seed", () => {
 
     const reply = await api.reporterMessage({ caseCode: "WD-DEMO-0003", body: "Thanks" });
     expect(reply.status).toBe(423);
+  });
+});
+
+describe("seed:demo guard", () => {
+  it("refuses unless DEMO_MODE is true or --force is passed", () => {
+    vi.stubEnv("DEMO_MODE", "false");
+    expect(() => assertDemoSeedAllowed([])).toThrow(/DEMO_MODE is not true/);
+    expect(() => assertDemoSeedAllowed(["--force"])).not.toThrow();
+    vi.stubEnv("DEMO_MODE", "");
+    expect(() => assertDemoSeedAllowed([])).toThrow(/--force/);
+    vi.stubEnv("DEMO_MODE", "true");
+    expect(() => assertDemoSeedAllowed([])).not.toThrow();
+  });
+
+  it("uses sample codes that a generated code can never equal (they contain 0 or 1)", () => {
+    for (const { caseCode } of DEMO_CASES) expect(caseCode).toMatch(/^WD-DEMO-[0-9]{4}$/);
+    for (const { caseCode } of DEMO_CASES) expect(caseCode.slice(3)).toMatch(/[01]/);
+  });
+});
+
+describe("DEMO_MODE daily cleanup", () => {
+  const passwords = { admin: "demo-admin-pass-1", aria: "demo-aria-pass-1", kiran: "demo-kiran-pass-1" };
+  const DAY = 24 * 60 * 60 * 1000;
+  const runCron = async () => {
+    const res = await cleanup(
+      new Request("http://localhost/api/cron/cleanup", { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } }),
+    );
+    expect(res.status).toBe(200);
+    return res.json();
+  };
+
+  /** Everything that makes up a case's content, without ids or timestamps. */
+  async function snapshot(caseCode: string) {
+    const report = await prisma.report.findUnique({
+      where: { caseCode },
+      include: {
+        statusUpdates: { orderBy: { createdAt: "asc" }, include: { moderator: { select: { email: true } } } },
+        messages: { orderBy: { createdAt: "asc" }, include: { moderator: { select: { email: true } } } },
+        internalNotes: { orderBy: { createdAt: "asc" }, include: { moderator: { select: { email: true } } } },
+      },
+    });
+    if (!report) return null;
+    return {
+      category: report.category,
+      description: report.description,
+      status: report.status,
+      awaitingReply: report.awaitingReply,
+      closed: report.closedAt !== null,
+      updates: report.statusUpdates.map((u) => [u.newStatus, u.note, u.visibility, u.moderator?.email]),
+      messages: report.messages.map((m) => [m.authorType, m.body, m.moderator?.email]),
+      notes: report.internalNotes.map((n) => [n.body, n.moderator.email]),
+    };
+  }
+  const snapshotAll = async () => Promise.all(DEMO_CASES.map((c) => snapshot(c.caseCode)));
+
+  /** A visitor's report from `ageMs` ago, with a message, an internal note and two evidence files. */
+  async function visitorReport(ageMs: number) {
+    const image = await uploadFile(await imageWithExif("jpeg"), "image/jpeg");
+    const pdf = await uploadFile(tinyPdf(), "application/pdf");
+    const { id, caseCode } = await createReport({ attachments: [image.uploadToken, pdf.uploadToken] });
+    await api.reporterMessage({ caseCode, body: "Visitor message" });
+    const mod = await prisma.moderator.findFirstOrThrow({ where: { email: DEMO_ACCOUNTS.aria.email } });
+    await prisma.internalNote.create({ data: { reportId: id, moderatorId: mod.id, body: "Visitor note" } });
+    await prisma.report.update({ where: { id }, data: { createdAt: new Date(Date.now() - ageMs) } });
+    return { id, caseCode };
+  }
+
+  async function seedEverything() {
+    await seedDemoCases(await seedDemoAccounts(passwords));
+    return snapshotAll();
+  }
+
+  it("deletes non-sample reports older than 24 hours with their messages, notes and evidence, and keeps newer ones", async () => {
+    vi.stubEnv("DEMO_MODE", "true");
+    await seedEverything();
+    const old = await visitorReport(DAY + 60_000);
+    const recent = await visitorReport(DAY - 60_000);
+    expect(pathsUnder(`reports/${old.id}/`)).toHaveLength(2);
+
+    const body = await runCron();
+    expect(body).toMatchObject({ demoReportsDeleted: 1, demoSamplesReset: DEMO_CASES.length });
+
+    expect(await prisma.report.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(await prisma.caseMessage.count({ where: { reportId: old.id } })).toBe(0);
+    expect(await prisma.internalNote.count({ where: { reportId: old.id } })).toBe(0);
+    expect(await prisma.attachment.count({ where: { reportId: old.id } })).toBe(0);
+    expect(await prisma.statusUpdate.count({ where: { reportId: old.id } })).toBe(0);
+    expect(pathsUnder(`reports/${old.id}/`)).toEqual([]);
+    expect((await api.lookupByBody({ caseCode: old.caseCode })).status).toBe(404);
+
+    expect(await prisma.report.findUnique({ where: { id: recent.id } })).not.toBeNull();
+    expect(pathsUnder(`reports/${recent.id}/`)).toHaveLength(2);
+    // The demo accounts that wrote on deleted reports are untouched.
+    expect(await prisma.moderator.count({ where: { isDemo: true } })).toBe(3);
+  });
+
+  it("resets every sample case to its seeded state, however visitors changed it", async () => {
+    vi.stubEnv("DEMO_MODE", "true");
+    const seeded = await seedEverything();
+    const aria = await authHeaders(DEMO_ACCOUNTS.aria.email, passwords.aria);
+
+    await api.reporterMessage({ caseCode: "WD-DEMO-0001", body: "Visitor reply" });
+    const submitted = await prisma.report.findUniqueOrThrow({ where: { caseCode: "WD-DEMO-0004" } });
+    await api.patch(submitted.id, { newStatus: "UNDER_REVIEW", note: "Visitor note" }, aria);
+    await api.note(submitted.id, { body: "Visitor internal note" }, aria);
+    const resolved = await prisma.report.findUniqueOrThrow({ where: { caseCode: "WD-DEMO-0002" } });
+    await api.patch(resolved.id, { newStatus: "CLOSED" }, aria);
+    await prisma.report.delete({ where: { caseCode: "WD-DEMO-0005" } }); // even a missing one comes back
+    expect(await snapshotAll()).not.toEqual(seeded);
+
+    expect((await runCron()).demoSamplesReset).toBe(DEMO_CASES.length);
+    expect(await snapshotAll()).toEqual(seeded);
+    expect(await prisma.report.count()).toBe(DEMO_CASES.length);
+
+    // And again: the reset is repeatable.
+    await runCron();
+    expect(await snapshotAll()).toEqual(seeded);
+  });
+
+  it("does none of this when DEMO_MODE is false", async () => {
+    vi.stubEnv("DEMO_MODE", "false");
+    await seedEverything();
+    const old = await visitorReport(3 * DAY);
+    await api.reporterMessage({ caseCode: "WD-DEMO-0001", body: "Visitor reply" });
+    const before = await snapshotAll();
+
+    expect(await runCron()).toMatchObject({ demoReportsDeleted: 0, demoSamplesReset: 0 });
+    expect(await prisma.report.findUnique({ where: { id: old.id } })).not.toBeNull();
+    expect(pathsUnder(`reports/${old.id}/`)).toHaveLength(2);
+    expect(await snapshotAll()).toEqual(before);
+  });
+
+  it("leaves the sample cases alone if the demo accounts are missing", async () => {
+    vi.stubEnv("DEMO_MODE", "true");
+    const ids = await seedDemoAccounts(passwords);
+    await seedDemoCases(ids);
+    await prisma.moderator.update({ where: { id: ids.kiran }, data: { isDemo: false } });
+    const before = await snapshotAll();
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await resetDemoCases()).toBe(0);
+    errorLog.mockRestore();
+    expect(await snapshotAll()).toEqual(before);
+  });
+
+  it("fails closed with 500 on an invalid DEMO_MODE value, deleting nothing", async () => {
+    await seedEverything();
+    const old = await visitorReport(3 * DAY);
+    vi.stubEnv("DEMO_MODE", "yes");
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await cleanup(
+      new Request("http://localhost/api/cron/cleanup", { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } }),
+    );
+    errorLog.mockRestore();
+    expect(res.status).toBe(500);
+    expect(await prisma.report.findUnique({ where: { id: old.id } })).not.toBeNull();
   });
 });
