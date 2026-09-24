@@ -26,6 +26,9 @@
     "screenshots": "next build && dotenv -e .env.local -- tsx --conditions=react-server scripts/screenshots.mjs",
     "record:demo": "next build && dotenv -e .env.local -- tsx --conditions=react-server scripts/record-demo.ts"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "9.1.0",
     "@prisma/client": "^6.19.3",
