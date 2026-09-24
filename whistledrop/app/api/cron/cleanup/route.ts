@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { UPLOAD_TOKEN_TTL_SECONDS } from "@/lib/auth";
 import { requireEnv } from "@/lib/env";
 import { listObjectsWithCreatedAt, removeObjects } from "@/lib/storage";
+import { reassertDemoAccounts } from "@/lib/demo";
 import { apiSuccess, internalError, unauthorized } from "@/lib/apiResponse";
 
 // Daily housekeeping, scheduled in vercel.json. Vercel Cron calls this with
@@ -12,6 +13,8 @@ import { apiSuccess, internalError, unauthorized } from "@/lib/apiResponse";
 //   expire after 30 minutes), so they are deleted.
 // - ConsumedUploadToken rows only matter while the token could still be
 //   presented; once older than the token lifetime they are deleted.
+// - The public demo accounts are made active again with their original roles
+//   (the API already refuses to change them; this is the backstop).
 
 const STAGING_MAX_AGE_MS = 60 * 60 * 1000;
 const REMOVE_BATCH = 100;
@@ -47,7 +50,9 @@ export async function GET(request: Request) {
       where: { consumedAt: { lt: new Date(now - UPLOAD_TOKEN_TTL_SECONDS * 1000) } },
     });
 
-    return apiSuccess({ deletedStagingObjects: stale.length, deletedConsumedUploadTokens: count });
+    const demoAccountsReset = await reassertDemoAccounts();
+
+    return apiSuccess({ deletedStagingObjects: stale.length, deletedConsumedUploadTokens: count, demoAccountsReset });
   } catch (err) {
     console.error("Cron cleanup failed:", err instanceof Error ? err.message : "unknown");
     return internalError();

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DataTable, type DataColumn } from "@/components/ui/DataTable";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EyebrowTag } from "@/components/ui/EyebrowTag";
+import timeline from "@/components/ui/StatusTimeline.module.css";
 import { HairlineShimmer } from "@/components/ui/HairlineShimmer";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { UnderlineInput, UnderlineSelect } from "@/components/ui/UnderlineField";
@@ -77,7 +78,7 @@ export function Moderators() {
       return;
     }
     reportFailure(r);
-    // CANNOT_MODIFY_SELF (403) and LAST_ADMIN (409) come with a message written for people; show it as is.
+    // CANNOT_MODIFY_SELF / DEMO_ACCOUNT_* (403) and LAST_ADMIN (409) come with a message written for people; show it as is.
     setRows((s) => ({ ...s, [m.id]: { pending: false, error: r.message } }));
   };
 
@@ -89,6 +90,12 @@ export function Moderators() {
         <span className={styles.email}>
           {m.email}
           {m.id === session.id && <span className={styles.you}> (you)</span>}
+          {m.isDemo && (
+            <>
+              {" "}
+              <span className={timeline.badge}>Demo</span>
+            </>
+          )}
         </span>
       ),
     },
@@ -102,6 +109,10 @@ export function Moderators() {
       cell: (m) => {
         const state = rows[m.id];
         const nextRole: ModeratorRole = m.role === "ADMIN" ? "MODERATOR" : "ADMIN";
+        // The server refuses any role or status change to a demo account; don't offer one.
+        if (m.isDemo) {
+          return <span className={styles.you}>Protected demo account</span>;
+        }
         return (
           <div className={styles.actions}>
             <div className={styles.buttons}>

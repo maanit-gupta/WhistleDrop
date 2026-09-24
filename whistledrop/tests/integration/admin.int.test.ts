@@ -73,7 +73,7 @@ describe("admin moderator management", () => {
     const { items } = await res.json();
 
     expect(items).toHaveLength(2);
-    for (const m of items) expect(Object.keys(m).sort()).toEqual(["createdAt", "email", "id", "isActive", "role"]);
+    for (const m of items) expect(Object.keys(m).sort()).toEqual(["createdAt", "email", "id", "isActive", "isDemo", "role"]);
     expect(JSON.stringify(items)).not.toMatch(/passwordHash|\$2[aby]\$/);
   });
 
@@ -86,6 +86,7 @@ describe("admin moderator management", () => {
       email: "new.mod@example.com",
       role: "MODERATOR",
       isActive: true,
+      isDemo: false,
       createdAt: expect.any(String),
     });
     await expect(authHeaders(newModerator.email, newModerator.password)).resolves.toBeDefined();

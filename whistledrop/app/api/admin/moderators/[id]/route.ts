@@ -38,8 +38,22 @@ export const PATCH = withAdmin(async (request: Request, ctx: RouteContext<"/api/
       const admins = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM "Moderator" WHERE role = 'ADMIN' AND "isActive" = true FOR UPDATE`;
 
-      const target = await tx.moderator.findUnique({ where: { id }, select: { role: true, isActive: true } });
+      const target = await tx.moderator.findUnique({
+        where: { id },
+        select: { role: true, isActive: true, isDemo: true },
+      });
       if (!target) return { kind: "not_found" } as const;
+
+      // Demo accounts' credentials are public, so neither side of a demo
+      // account may change anything that matters. No-op updates still pass.
+      const changes =
+        (role !== undefined && role !== target.role) || (isActive !== undefined && isActive !== target.isActive);
+      // A demo account keeps its role and stays active (the daily cron also restores it).
+      if (changes && target.isDemo) return { kind: "demo_protected" } as const;
+      // A demo account can't change any other account: not demote or deactivate
+      // one, and not promote or reactivate one either (that would hand ADMIN,
+      // or a retired account, to whoever holds the public credentials).
+      if (changes && admin.isDemo) return { kind: "demo_restricted" } as const;
 
       const targetIsActiveAdmin = target.role === "ADMIN" && target.isActive;
       if (targetIsActiveAdmin && removesAdmin && admins.length <= 1) return { kind: "last_admin" } as const;
@@ -50,7 +64,7 @@ export const PATCH = withAdmin(async (request: Request, ctx: RouteContext<"/api/
       const moderator = await tx.moderator.update({
         where: { id },
         data: { role, isActive },
-        select: { id: true, email: true, role: true, isActive: true, createdAt: true },
+        select: { id: true, email: true, role: true, isActive: true, isDemo: true, createdAt: true },
       });
       return { kind: "ok", moderator } as const;
     });
@@ -64,6 +78,14 @@ export const PATCH = withAdmin(async (request: Request, ctx: RouteContext<"/api/
         return notFound("Moderator not found");
       case "last_admin":
         return apiError("LAST_ADMIN", "At least one active administrator must remain", 409);
+      case "demo_protected":
+        return apiError("DEMO_ACCOUNT_PROTECTED", "Demo accounts can't be deactivated or have their role changed", 403);
+      case "demo_restricted":
+        return apiError(
+          "DEMO_ACCOUNT_RESTRICTED",
+          "Demo accounts can't change another account's role or active status",
+          403,
+        );
     }
   } catch (err) {
     console.error("PATCH /api/admin/moderators/[id] failed:", err);

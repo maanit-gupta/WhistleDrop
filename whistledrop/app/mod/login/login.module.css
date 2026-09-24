@@ -26,6 +26,13 @@
   width: 100%;
 }
 
+.demo {
+  margin-top: 32px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-secondary);
+}
+
 @media (max-width: 767px) {
   .wrap {
     padding-top: 112px;

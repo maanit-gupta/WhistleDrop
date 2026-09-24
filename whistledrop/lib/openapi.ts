@@ -188,6 +188,7 @@ export const Moderator = registry.register(
     email: z.string(),
     role: z.enum(ModeratorRole),
     isActive: z.boolean(),
+    isDemo: z.boolean().describe("Public demo account: its role and active status can't be changed."),
     createdAt: z.iso.datetime(),
   }),
 );
@@ -429,7 +430,7 @@ registry.registerPath({
     201: json(Moderator, "Created"),
     400: e400,
     401: e401,
-    403: e403,
+    403: error("Not an ADMIN (FORBIDDEN), or a demo account creating an ADMIN (DEMO_ACCOUNT_RESTRICTED)"),
     409: error("Email already in use (EMAIL_TAKEN)"),
     500: e500,
   },
@@ -446,7 +447,9 @@ registry.registerPath({
     200: json(Moderator, "Updated"),
     400: e400,
     401: e401,
-    403: error("Not an ADMIN (FORBIDDEN), or demoting/deactivating yourself (CANNOT_MODIFY_SELF)"),
+    403: error(
+      "Not an ADMIN (FORBIDDEN); demoting/deactivating yourself (CANNOT_MODIFY_SELF); changing a demo account (DEMO_ACCOUNT_PROTECTED); or a demo account changing another account's role or status (DEMO_ACCOUNT_RESTRICTED)",
+    ),
     404: e404,
     409: error("Would leave no active ADMIN (LAST_ADMIN)"),
     500: e500,
@@ -459,11 +462,15 @@ registry.registerPath({
   tags: ["Internal"],
   summary: "Daily cleanup (Vercel Cron)",
   description:
-    "Deletes staged uploads older than 1 hour and consumed upload-token records older than the 30-minute token lifetime.",
+    "Deletes staged uploads older than 1 hour and consumed upload-token records older than the 30-minute token lifetime, and restores the demo accounts (active, original roles).",
   security: [{ [cronAuth.name]: [] }],
   responses: {
     200: json(
-      z.object({ deletedStagingObjects: z.number().int(), deletedConsumedUploadTokens: z.number().int() }),
+      z.object({
+        deletedStagingObjects: z.number().int(),
+        deletedConsumedUploadTokens: z.number().int(),
+        demoAccountsReset: z.number().int(),
+      }),
       "Cleanup summary",
     ),
     401: error("Missing or wrong CRON_SECRET (UNAUTHORIZED)"),

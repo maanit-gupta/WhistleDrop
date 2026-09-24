@@ -15,7 +15,12 @@ export async function resetDatabase() {
 export const MODERATOR = { email: "mod@example.com", password: "integration-test-password" };
 
 export async function seedModerator(
-  { email, password, role }: { email: string; password: string; role: ModeratorRole } = { ...MODERATOR, role: "ADMIN" },
+  {
+    email,
+    password,
+    role,
+    isDemo = false,
+  }: { email: string; password: string; role: ModeratorRole; isDemo?: boolean } = { ...MODERATOR, role: "ADMIN" },
 ) {
-  return prisma.moderator.create({ data: { email, role, passwordHash: await bcrypt.hash(password, 4) } });
+  return prisma.moderator.create({ data: { email, role, isDemo, passwordHash: await bcrypt.hash(password, 4) } });
 }

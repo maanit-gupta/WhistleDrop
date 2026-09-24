@@ -9,6 +9,8 @@ export interface AuthenticatedModerator {
   id: string;
   email: string;
   role: ModeratorRole;
+  /** A public demo account: may not change any account's role or active status. */
+  isDemo: boolean;
 }
 
 async function authenticate(request: Request): Promise<AuthenticatedModerator | Response> {
@@ -20,10 +22,10 @@ async function authenticate(request: Request): Promise<AuthenticatedModerator | 
     // immediately, not when the 12-hour token expires.
     const moderator = await prisma.moderator.findUnique({
       where: { id: token.sub },
-      select: { id: true, email: true, role: true, isActive: true },
+      select: { id: true, email: true, role: true, isActive: true, isDemo: true },
     });
     if (!moderator?.isActive) return unauthorized();
-    return { id: moderator.id, email: moderator.email, role: moderator.role };
+    return { id: moderator.id, email: moderator.email, role: moderator.role, isDemo: moderator.isDemo === true };
   } catch (err) {
     console.error("Moderator auth lookup failed:", err);
     return internalError();

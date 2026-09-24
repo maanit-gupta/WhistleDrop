@@ -8,7 +8,7 @@ import { apiError, apiSuccess, badRequest, internalError, readJson, validationEr
 const BCRYPT_COST = 12;
 
 /** Never includes passwordHash. */
-const publicModeratorFields = { id: true, email: true, role: true, isActive: true, createdAt: true } as const;
+const publicModeratorFields = { id: true, email: true, role: true, isActive: true, isDemo: true, createdAt: true } as const;
 
 export const GET = withAdmin(async () => {
   try {
@@ -20,13 +20,19 @@ export const GET = withAdmin(async () => {
   }
 });
 
-export const POST = withAdmin(async (request: Request) => {
+export const POST = withAdmin(async (request: Request, _ctx: unknown, admin) => {
   const body = await readJson(request);
   if (!body.ok) return badRequest("Request body must be valid JSON");
 
   const parsed = createModeratorSchema.safeParse(body.data);
   if (!parsed.success) return validationError(parsed.error);
   const { email, password, role } = parsed.data;
+
+  // Demo credentials are public. An ADMIN made by a demo account would be a
+  // non-demo admin controlled by anyone, able to deactivate the real admins.
+  if (admin.isDemo && role !== "MODERATOR") {
+    return apiError("DEMO_ACCOUNT_RESTRICTED", "Demo accounts can only create MODERATOR accounts", 403);
+  }
 
   try {
     const moderator = await prisma.moderator.create({

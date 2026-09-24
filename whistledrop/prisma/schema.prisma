@@ -98,6 +98,10 @@ model Moderator {
   role          ModeratorRole  @default(MODERATOR)
   /// Checked on every authenticated request, so deactivation is immediate.
   isActive      Boolean        @default(true)
+  /// Public demo account (credentials in DUMMY_SIGN_INS.txt). Its role and
+  /// active status can't be changed through the API, it can't change other
+  /// accounts' role or status, and the daily cron restores it.
+  isDemo        Boolean        @default(false)
   createdAt     DateTime       @default(now())
   statusUpdates StatusUpdate[]
   caseMessages  CaseMessage[]

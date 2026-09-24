@@ -3,12 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { EyebrowTag } from "@/components/ui/EyebrowTag";
+import { LeaveSiteLink } from "@/components/ui/LeaveSiteModal";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { UnderlineInput } from "@/components/ui/UnderlineField";
 import { login, type ApiFailure } from "@/lib/client/api";
 import { formatWait } from "@/lib/client/labels";
 import { getSession, setToken } from "@/lib/client/session";
-import { ROUTES } from "@/lib/site";
+import { DEMO_SIGN_INS_URL, ROUTES } from "@/lib/site";
 import mod from "../mod.module.css";
 import styles from "./login.module.css";
 
@@ -110,6 +111,11 @@ export function LoginForm() {
             Sign In
           </SubmitButton>
         </form>
+        {/* A div, not a p: LeaveSiteLink renders its <dialog> alongside the link. */}
+        <div className={styles.demo}>
+          Reviewing this project? Demo accounts are listed in{" "}
+          <LeaveSiteLink href={DEMO_SIGN_INS_URL}>DUMMY_SIGN_INS.txt</LeaveSiteLink> in the repository.
+        </div>
       </section>
     </main>
   );

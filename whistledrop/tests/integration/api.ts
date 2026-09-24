@@ -98,10 +98,10 @@ export async function authHeaders(email: string, password: string): Promise<Head
 
 let accountCounter = 0;
 /** Creates an account directly in the database and logs it in. */
-export async function createAccount(role: ModeratorRole) {
-  const email = `${role.toLowerCase()}${++accountCounter}@example.com`;
+export async function createAccount(role: ModeratorRole, { isDemo = false }: { isDemo?: boolean } = {}) {
+  const email = `${isDemo ? "demo-" : ""}${role.toLowerCase()}${++accountCounter}@example.com`;
   const password = "integration-test-password";
-  const { id } = await seedModerator({ email, password, role });
+  const { id } = await seedModerator({ email, password, role, isDemo });
   return { id, email, password, headers: await authHeaders(email, password) };
 }
 

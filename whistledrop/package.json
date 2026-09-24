@@ -11,6 +11,8 @@
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:deploy": "dotenv -e .env.local -- prisma migrate deploy",
     "db:seed": "dotenv -e .env.local -- prisma db seed",
+    "seed:demo": "dotenv -e .env.local -- tsx --conditions=react-server prisma/seed-demo.ts",
+    "account:deactivate": "dotenv -e .env.local -- tsx scripts/deactivate-account.ts",
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",

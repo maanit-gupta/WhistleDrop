@@ -40,7 +40,7 @@ describe("GET /api/cron/cleanup", () => {
   it("deletes staging objects older than 1 hour and consumed tokens older than the token lifetime", async () => {
     const res = await run(CRON());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ deletedStagingObjects: 2, deletedConsumedUploadTokens: 2 });
+    expect(await res.json()).toEqual({ deletedStagingObjects: 2, deletedConsumedUploadTokens: 2, demoAccountsReset: 0 });
 
     expect(pathsUnder("staging/")).toEqual(["staging/fresh.jpg"]);
     expect(pathsUnder("reports/")).toEqual(["reports/clreport00000000000000001/a.jpg"]);
@@ -49,7 +49,11 @@ describe("GET /api/cron/cleanup", () => {
 
   it("is idempotent", async () => {
     await run(CRON());
-    expect(await (await run(CRON())).json()).toEqual({ deletedStagingObjects: 0, deletedConsumedUploadTokens: 0 });
+    expect(await (await run(CRON())).json()).toEqual({
+      deletedStagingObjects: 0,
+      deletedConsumedUploadTokens: 0,
+      demoAccountsReset: 0,
+    });
   });
 
   it.each([

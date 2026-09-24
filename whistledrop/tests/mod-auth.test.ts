@@ -142,7 +142,7 @@ describe("withModerator", () => {
     const ctx = { params: Promise.resolve({}) };
 
     expect((await guarded(req, ctx)).status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(req, ctx, { id: MOD_ID, email: EMAIL, role: "MODERATOR" });
+    expect(handler).toHaveBeenCalledWith(req, ctx, { id: MOD_ID, email: EMAIL, role: "MODERATOR", isDemo: false });
   });
 
   it("returns 401 without calling the handler when the account has been deactivated", async () => {
