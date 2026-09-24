@@ -238,9 +238,25 @@ There is **no delete endpoint**: moderators are deactivated, never deleted.
 - Login returns no role in the body; it's in the JWT (see above).
 - Upload limits (`ALLOWED_UPLOAD_TYPES`, `MAX_UPLOAD_BYTES`, `MAX_ATTACHMENTS`) live in the server-only `lib/validation.ts`. The client can import their *types* but not their values; the dropzone takes them as props.
 
+## Moderator UI notes (Part 3)
+
+- No backend changes were needed: `GET /api/mod/reports/{id}` already returns attachments
+  (`id, mimeType, sizeBytes, createdAt`, no URLs or paths) and each update's `visibility` and
+  `moderator.email`.
+- The dashboard's counts come from `GET /api/mod/reports?status=…&pageSize=1` (and `category=…`),
+  one request each, in parallel, reading `total`. There is no stats endpoint.
+- The attachment "View" button treats **404 as well as 410** as "Evidence purged": this API never
+  sends 410, and a 404 for an attachment the page just listed means its row was deleted (the case
+  was closed in the meantime).
+- The reports page keeps filters in its query string, except the search text (`q`), which can be a
+  case code and so stays in memory only.
+
 ## Open issues
 
 1. **Case code in the lookup URL path.** The rule "case codes never appear in URLs" can be kept for the
    address bar, history, storage and logs on the client. The lookup request itself carries the code in its
    path because that's how the API is built, so platform access logs may record it. Fixing that needs a
    backend change, e.g. `POST /api/reports/lookup { caseCode }`, which is out of scope here.
+2. **No description in the report list.** `GET /api/mod/reports` items have no `description`, so the
+   reports table can't show a description preview without one extra request per row. Adding a
+   truncated `description` (e.g. the first 160 characters) to the list's `select` would fix it.

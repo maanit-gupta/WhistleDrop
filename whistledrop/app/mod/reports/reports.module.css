@@ -1,0 +1,83 @@
+/* Filter bar: a 12-column grid of underline fields. */
+.filters {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 32px var(--gutter);
+  align-items: start;
+}
+
+.search {
+  grid-column: span 6;
+}
+
+.date {
+  grid-column: span 3;
+}
+
+.half {
+  grid-column: span 6;
+}
+
+.sort {
+  grid-column: span 3;
+}
+
+.clear {
+  grid-column: span 6;
+  align-self: end;
+  justify-self: end;
+  padding-bottom: 12px;
+}
+
+.clear button {
+  color: var(--fg-secondary);
+}
+
+.clear button:hover:not(:disabled) {
+  color: var(--fg);
+}
+
+.clear button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.results {
+  margin-top: 72px;
+}
+
+.stale {
+  opacity: 0.5;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.pagination {
+  margin-top: 32px;
+}
+
+@media (max-width: 1023px) {
+  .search,
+  .half {
+    grid-column: span 12;
+  }
+
+  .date,
+  .sort {
+    grid-column: span 6;
+  }
+
+  .clear {
+    grid-column: span 12;
+    justify-self: start;
+  }
+}
+
+@media (max-width: 767px) {
+  .filters {
+    row-gap: 28px;
+  }
+
+  .results {
+    margin-top: 48px;
+  }
+}

@@ -1,0 +1,150 @@
+.state {
+  margin-top: 48px;
+}
+
+/* Report 60%, action panel 35%. */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 60fr) minmax(0, 35fr);
+  column-gap: 5%;
+  align-items: start;
+  margin-top: 48px;
+}
+
+.head {
+  display: grid;
+  justify-items: start;
+  gap: 20px;
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.code {
+  overflow-wrap: anywhere;
+}
+
+.dates {
+  font-size: 14px;
+  color: var(--fg-secondary);
+}
+
+.mobileBreak {
+  display: none;
+}
+
+.block {
+  padding-block: 40px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.block:last-child {
+  border-bottom: 0;
+}
+
+.description {
+  max-width: 68ch;
+  font-size: var(--fs-body-lg);
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.evidence {
+  font-size: var(--fs-body-lg);
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.muted {
+  font-size: 15px;
+  color: var(--fg-secondary);
+}
+
+.files {
+  display: grid;
+}
+
+.file {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-block: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.file:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+
+.fileInfo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.fileError {
+  flex-basis: 100%;
+}
+
+.panel {
+  position: sticky;
+  top: 120px;
+}
+
+.noteFields {
+  display: grid;
+  gap: 28px;
+  padding-top: 4px;
+}
+
+.note textarea {
+  min-height: 112px;
+}
+
+.transitions {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+@media (max-width: 1023px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 48px;
+  }
+
+  .panel {
+    position: static;
+  }
+}
+
+@media (max-width: 767px) {
+  .grid {
+    margin-top: 32px;
+  }
+
+  .head {
+    padding-bottom: 32px;
+  }
+
+  .block {
+    padding-block: 32px;
+  }
+
+  .dates > span[aria-hidden] {
+    display: none;
+  }
+
+  .mobileBreak {
+    display: inline;
+  }
+}

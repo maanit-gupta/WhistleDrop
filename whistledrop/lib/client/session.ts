@@ -9,7 +9,7 @@ import type { ModeratorRole } from "@prisma/client";
 //   the UI shows (e.g. the ADMIN-only "Moderators" link). The server enforces
 //   authorization on every request and re-reads the role from the database.
 //
-// React: useSyncExternalStore(subscribe, getToken, () => null) gives a stable
+// React: useSyncExternalStore(subscribe, peekToken, () => null) gives a stable
 // snapshot (a string), then decodeSession(token) for the claims.
 
 const KEY = "whistledrop.moderatorToken";
@@ -65,6 +65,20 @@ export function getToken(): string | null {
     return null;
   }
   return token;
+}
+
+/**
+ * The stored token if it's still usable, or null. Unlike getToken() it never
+ * writes to storage, so it's safe as a useSyncExternalStore snapshot (called
+ * during render).
+ */
+export function peekToken(): string | null {
+  try {
+    const token = storage()?.getItem(KEY) ?? null;
+    return decodeSession(token) ? token : null;
+  } catch {
+    return null;
+  }
 }
 
 export function setToken(token: string): void {

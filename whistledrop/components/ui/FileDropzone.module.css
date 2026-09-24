@@ -13,7 +13,6 @@
 .zone:focus-within,
 .zone[data-dragging] {
   border-bottom-color: var(--focus-ring);
-  box-shadow: 0 1px 0 0 var(--focus-ring);
 }
 
 .zone[data-dragging] {

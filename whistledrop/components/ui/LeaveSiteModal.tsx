@@ -39,7 +39,7 @@ export function LeaveSiteModal({ url, onClose }: LeaveSiteModalProps) {
       title="You're leaving WhistleDrop"
       description={
         safe
-          ? "This link goes to a site WhistleDrop doesn't control. It opens in a new tab and won't be told where you came from."
+          ? "This link goes to a site WhistleDrop doesn't control, and that site can see your IP address. It opens in a new tab and won't be told where you came from."
           : "This link can't be opened safely, so WhistleDrop won't open it."
       }
       footer={

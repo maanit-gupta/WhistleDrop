@@ -1,0 +1,100 @@
+.email {
+  overflow-wrap: anywhere;
+}
+
+.you {
+  color: var(--fg-secondary);
+}
+
+.actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 24px;
+}
+
+.buttons button {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.buttons button:disabled {
+  opacity: 0.45;
+  cursor: progress;
+}
+
+.rowError {
+  max-width: 36ch;
+  text-align: right;
+}
+
+.note {
+  margin-top: 24px;
+  max-width: 64ch;
+  font-size: 14px;
+  color: var(--fg-secondary);
+}
+
+.create {
+  margin-top: 72px;
+  padding-top: 48px;
+  border-top: 1px solid var(--rule);
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 32px var(--gutter);
+  align-items: start;
+}
+
+.field {
+  grid-column: span 4;
+}
+
+.submit {
+  grid-column: 1 / span 4;
+}
+
+.formError {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1023px) {
+  .field {
+    grid-column: span 6;
+  }
+
+  .submit {
+    grid-column: 1 / span 6;
+  }
+}
+
+@media (max-width: 767px) {
+  .actions {
+    justify-items: start;
+  }
+
+  .buttons {
+    justify-content: flex-start;
+  }
+
+  .rowError {
+    text-align: left;
+  }
+
+  .field,
+  .submit {
+    grid-column: 1 / -1;
+  }
+
+  .create {
+    margin-top: 64px;
+  }
+}

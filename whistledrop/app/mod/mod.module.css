@@ -1,0 +1,68 @@
+/* Shared by the moderator pages. */
+
+.page {
+  min-height: 100dvh;
+  padding-top: 160px;
+  padding-bottom: 120px;
+}
+
+.head {
+  display: grid;
+  justify-items: start;
+  gap: 24px;
+  margin-bottom: 64px;
+}
+
+.headRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 64px;
+}
+
+.headRow > .head {
+  margin-bottom: 0;
+}
+
+.subheading {
+  margin-bottom: 24px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--fg-secondary);
+}
+
+.back {
+  color: var(--fg-secondary);
+}
+
+.back:hover {
+  color: var(--fg);
+}
+
+.alert {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  line-height: 1.45;
+  color: var(--fg);
+}
+
+.alert::before {
+  content: "! ";
+}
+
+@media (max-width: 767px) {
+  .page {
+    padding-top: 120px;
+    padding-bottom: 96px;
+  }
+
+  .head,
+  .headRow {
+    margin-bottom: 40px;
+  }
+}

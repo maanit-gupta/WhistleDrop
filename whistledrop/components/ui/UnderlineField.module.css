@@ -51,12 +51,11 @@
   opacity: 1;
 }
 
-/* The underline is the focus indicator for text controls (lime, like the ring). */
+/* The underline is the focus indicator for text controls: it turns lime, like the ring (no shadows, 1px only). */
 .control:focus,
 .control:focus-visible {
   outline: none;
   border-bottom-color: var(--focus-ring);
-  box-shadow: 0 1px 0 0 var(--focus-ring);
 }
 
 .field[data-invalid] .control {
@@ -231,8 +230,8 @@ input[type="date"].control {
   width: 10px;
   height: 5px;
   margin-top: -3px;
-  border-left: 1.5px solid var(--ink-950);
-  border-bottom: 1.5px solid var(--ink-950);
+  border-left: 1px solid var(--ink-950);
+  border-bottom: 1px solid var(--ink-950);
   transform: rotate(-45deg) scale(0);
   transition: transform 200ms var(--ease);
 }

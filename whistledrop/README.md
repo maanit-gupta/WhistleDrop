@@ -1,13 +1,14 @@
 # WhistleDrop
 
-An anonymous reporting backend. Anyone can submit a report (security issue, harassment, corruption, technical problem), optionally with evidence files, without an account, and receives a **case code** such as `WD-7K2P-Q9XM`. The case code is the only way back to the report: the reporter uses it to check progress, and moderators move reports through a fixed review workflow that ends with the report being permanently closed and its evidence deleted.
+An anonymous reporting service. Anyone can submit a report (security issue, harassment, corruption, technical problem), optionally with evidence files, without an account, and receives a **case code** such as `WD-7K2P-Q9XM`. The case code is the only way back to the report: the reporter uses it to check progress, and moderators move reports through a fixed review workflow that ends with the report being permanently closed and its evidence deleted.
 
-Built with Next.js (App Router route handlers), Prisma, Supabase Postgres and Supabase Storage. There is no frontend in this repository yet; it is the API only.
+Built with Next.js (App Router pages and route handlers), Prisma, Supabase Postgres and Supabase Storage. The reporter pages (`/`, `/report`, `/track`) and the moderator area (`/mod`) are in `app/`; the API they use is documented in [`docs/frontend-api-contract.md`](docs/frontend-api-contract.md).
 
 **Interactive API docs:** [`/api-docs`](http://localhost:3000/api-docs) (Swagger UI, with a working **Authorize** button for moderator tokens). The OpenAPI 3.1 document is at [`/api/openapi`](http://localhost:3000/api/openapi).
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Tech stack](#tech-stack)
 - [Setup](#setup)
 - [Testing](#testing)
@@ -20,6 +21,24 @@ Built with Next.js (App Router route handlers), Prisma, Supabase Postgres and Su
 - [Deployment (Vercel)](#deployment-vercel)
 - [Known limitations](#known-limitations)
 - [Project structure](#project-structure)
+
+## Screenshots
+
+Desktop (1440px) and mobile (390px), captured from the production build by `npm run screenshots` (Playwright). The script seeds its data through the real API only: it submits reports, signs in with the `SEED_ADMIN_*` (or `SEED_MODERATOR_*`) account, and moves one report through several statuses. Full-size images are in [`docs/screenshots/`](docs/screenshots/).
+
+| Page | Desktop | Mobile |
+| --- | --- | --- |
+| Home | <img src="docs/screenshots/01-home-desktop.png" alt="Home, desktop" width="560"> | <img src="docs/screenshots/01-home-mobile.png" alt="Home, mobile" width="180"> |
+| Make a report | <img src="docs/screenshots/02-report-desktop.png" alt="Make a report, desktop" width="560"> | <img src="docs/screenshots/02-report-mobile.png" alt="Make a report, mobile" width="180"> |
+| Case code screen | <img src="docs/screenshots/03-case-code-desktop.png" alt="Case code screen, desktop" width="560"> | <img src="docs/screenshots/03-case-code-mobile.png" alt="Case code screen, mobile" width="180"> |
+| Track a case (with a result) | <img src="docs/screenshots/04-track-desktop.png" alt="Track a case (with a result), desktop" width="560"> | <img src="docs/screenshots/04-track-mobile.png" alt="Track a case (with a result), mobile" width="180"> |
+| Moderator sign-in | <img src="docs/screenshots/05-mod-login-desktop.png" alt="Moderator sign-in, desktop" width="560"> | <img src="docs/screenshots/05-mod-login-mobile.png" alt="Moderator sign-in, mobile" width="180"> |
+| Case dashboard | <img src="docs/screenshots/06-dashboard-desktop.png" alt="Case dashboard, desktop" width="560"> | <img src="docs/screenshots/06-dashboard-mobile.png" alt="Case dashboard, mobile" width="180"> |
+| Reports list | <img src="docs/screenshots/07-reports-desktop.png" alt="Reports list, desktop" width="560"> | <img src="docs/screenshots/07-reports-mobile.png" alt="Reports list, mobile" width="180"> |
+| Report detail | <img src="docs/screenshots/08-report-detail-desktop.png" alt="Report detail, desktop" width="560"> | <img src="docs/screenshots/08-report-detail-mobile.png" alt="Report detail, mobile" width="180"> |
+| Moderators (admin) | <img src="docs/screenshots/09-moderators-desktop.png" alt="Moderators (admin), desktop" width="560"> | <img src="docs/screenshots/09-moderators-mobile.png" alt="Moderators (admin), mobile" width="180"> |
+
+`npm run screenshots -- --only=dashboard,reports` retakes selected pages. The case code screen is a real submission, so it counts toward the 10-per-hour report limit.
 
 ## Tech stack
 
@@ -99,6 +118,7 @@ Without Upstash credentials, `npm run dev` uses an in-memory rate limiter and lo
 | `npm run test:db:down` | Stops and discards the test database. |
 | `npm run test:e2e` | Builds the app and runs `tests/e2e/` against `next start`: checks the page CSP nonce on Next's real rendered HTML, and that API routes and `/api-docs` keep their fixed policies. No database needed. |
 | `npm run test:all` | All three suites (needs the test database running). |
+| `npm run screenshots` | Builds, starts `next start` on port 3123, seeds data through the API and saves screenshots to `docs/screenshots/` (see [Screenshots](#screenshots)). Needs `.env.local` and the Playwright browser (`npx playwright install chromium`). |
 
 The integration tests never touch Supabase. They refuse to start unless `TEST_DATABASE_URL` is a **local** host with a database name ending in `_test`. Before each test they truncate the tables, and they check the database name again first. The comment in `tests/integration/globalSetup.ts` explains why this approach was chosen over wrapping each test in a rolled-back transaction.
 
@@ -441,6 +461,8 @@ app/
   api/openapi/route.ts                                   GET    OpenAPI document
   api/cron/cleanup/route.ts                              GET    daily cleanup (Vercel Cron, CRON_SECRET)
   api-docs/route.ts                                      GET    Swagger UI
+  page.tsx, report/, track/                              reporter pages (with QuickExit)
+  mod/                                                   moderator area: login, dashboard, reports, report detail, moderators (client-side guard in mod/ModShell.tsx)
 proxy.ts           per-request CSP nonce for pages
 lib/
   db.ts            Prisma client singleton
@@ -463,6 +485,7 @@ scripts/
   setup-storage.ts     creates the private evidence bucket
   copy-swagger-ui.mjs  copies Swagger UI assets into public/ on install
   check-env.ts         npm run env:check
+  screenshots.mjs      npm run screenshots (Playwright, API-only seeding)
 public/api-docs/init.js   Swagger UI bootstrap (a file, so no inline script is needed)
 tests/
   *.test.ts                unit tests (mocked Prisma / Storage / Upstash)

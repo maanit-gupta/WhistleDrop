@@ -1,0 +1,42 @@
+.wrap {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 140px var(--page-inset) 96px;
+}
+
+/* Same surface as Modal: ink-900, one hairline, card radius. */
+.panel {
+  display: grid;
+  justify-items: start;
+  width: min(480px, 100%);
+  padding: 48px;
+  background: var(--ink-900);
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-card);
+}
+
+.title {
+  margin: 24px 0 48px;
+}
+
+.form {
+  display: grid;
+  gap: 32px;
+  width: 100%;
+}
+
+@media (max-width: 767px) {
+  .wrap {
+    padding-top: 112px;
+    place-items: start center;
+  }
+
+  .panel {
+    padding: 32px 24px;
+  }
+
+  .title {
+    margin-bottom: 36px;
+  }
+}

@@ -20,7 +20,8 @@
     "storage:setup": "dotenv -e .env.local -- tsx --conditions=react-server scripts/setup-storage.ts",
     "env:check": "dotenv -e .env.local -- tsx scripts/check-env.ts",
     "test:e2e": "next build && vitest run --project e2e",
-    "test:all": "npm test && npm run test:integration && npm run test:e2e"
+    "test:all": "npm test && npm run test:integration && npm run test:e2e",
+    "screenshots": "next build && dotenv -e .env.local -- node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "9.1.0",
@@ -45,6 +46,7 @@
     "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "playwright": "^1.63.0",
     "prisma": "^6.19.3",
     "tsx": "^4.23.15",
     "typescript": "^5",

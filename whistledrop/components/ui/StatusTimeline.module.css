@@ -21,7 +21,11 @@
   position: relative;
 }
 
-/* Nodes: white at 40% (3.7:1 on ink, above the 3:1 needed for graphics); current is lime. */
+/*
+ * Nodes: white at 40% on the page background (3.7:1 on ink, above the 3:1
+ * needed for graphics), mixed to an opaque colour so the hairline doesn't
+ * show through; current is lime.
+ */
 .node {
   position: absolute;
   left: -32px;
@@ -29,8 +33,7 @@
   width: var(--node);
   height: var(--node);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
-  box-shadow: 0 0 0 4px var(--timeline-bg, var(--ink-950));
+  background: color-mix(in srgb, #fff 40%, var(--ink-950));
 }
 
 .current .node {
@@ -68,6 +71,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .internal {
