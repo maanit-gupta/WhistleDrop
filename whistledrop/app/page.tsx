@@ -2,6 +2,7 @@ import { DemoBanner } from "@/components/ui/DemoBanner";
 import { NavPill } from "@/components/ui/NavPill";
 import { isDemoMode } from "@/lib/env";
 import { CtaBand } from "@/components/sections/CtaBand";
+import { Demo } from "@/components/sections/Demo";
 import { Distinction } from "@/components/sections/Distinction";
 import { EntryPoints } from "@/components/sections/EntryPoints";
 import { Footer } from "@/components/sections/Footer";
@@ -20,6 +21,7 @@ export default function Home() {
         <EntryPoints />
         <HowItWorks />
         <Distinction />
+        <Demo />
         <Promises />
         <CtaBand />
       </main>

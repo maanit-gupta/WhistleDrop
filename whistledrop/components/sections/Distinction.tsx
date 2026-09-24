@@ -6,7 +6,7 @@ import styles from "./Distinction.module.css";
 
 // Every sentence here is checked against the backend: app/api/reports/route.ts
 // (body fields only), lib/rateLimit.ts (daily-salted HMAC, Redis only),
-// lib/caseCode.ts (crypto.randomBytes, 36^8), app/api/reports/[caseCode]
+// lib/caseCode.ts (crypto.randomBytes, 34^8), app/api/reports/[caseCode]
 // (identical 404s), lib/uploads.ts (sharp re-encode; PDFs untouched) and the
 // status route (files deleted on CLOSED).
 export function Distinction() {
@@ -33,7 +33,7 @@ export function Distinction() {
         <NumberedFeatureRow
           number="02"
           title="Hard-to-Guess Case Codes"
-          description="Codes come from a cryptographically secure generator, one of about 2.8 trillion. Lookups are rate limited, and a wrong code gets exactly the same answer as a malformed one."
+          description="Codes come from a cryptographically secure generator, one of about 1.8 trillion. Lookups are rate limited, and a wrong code gets exactly the same answer as a malformed one."
         />
         <NumberedFeatureRow
           number="03"

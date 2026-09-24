@@ -38,6 +38,8 @@ export function pagePolicy(nonce: string, isDev: boolean): string {
     "style-src": "'self' 'unsafe-inline'",
     "img-src": "'self' data: blob:",
     "font-src": "'self'",
+    // The home page's demo walkthrough (/media/demo.mp4). A plain file URL, so no blob:.
+    "media-src": "'self'",
     "connect-src": `'self' ${supabaseOrigin()}`,
     "object-src": "'none'",
     "base-uri": "'self'",

@@ -277,3 +277,25 @@ export async function resetDemoCases(): Promise<number> {
   }
   return DEMO_CASES.length;
 }
+
+// ── Walkthrough video ────────────────────────────────────────────────────
+
+export interface DemoChapter {
+  label: string;
+  /** Seconds into /media/demo.mp4. */
+  start: number;
+  /** One line for the text summary shown with the video. */
+  summary: string;
+}
+
+// BEGIN demo-chapters: written by scripts/record-demo.ts (npm run record:demo); don't edit by hand.
+export const DEMO_VIDEO_DURATION = 138.5;
+export const DEMO_CHAPTERS: readonly DemoChapter[] = [
+  { label: "Submit", start: 5.9, summary: "A report is written and sent with an image attached; the case code is copied and saved." },
+  { label: "Track", start: 23.8, summary: "The case code shows the report as Submitted, with an empty conversation." },
+  { label: "Review", start: 29.8, summary: "A moderator signs in, finds the case, starts the review with a public note, adds an internal note and asks the reporter a question." },
+  { label: "Conversation", start: 68.1, summary: "The reporter sees the question from the review team (the internal note isn't there) and answers; the moderator reads it and resolves the case." },
+  { label: "Close", start: 98.3, summary: "The case is closed permanently: evidence is deleted, and the reporter can still read the whole conversation but not reply." },
+  { label: "Admin", start: 117.8, summary: "A demo admin tries to deactivate a demo account and the server refuses; then the API docs." },
+];
+// END demo-chapters

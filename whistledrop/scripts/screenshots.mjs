@@ -1,26 +1,29 @@
 // npm run screenshots
 //
 // Builds are done by the npm script; this starts the production server
-// (`next start`), seeds whatever data the pages need THROUGH THE REAL API
-// (never the database), and saves desktop (1440px) and mobile (390px)
-// screenshots of every page to docs/screenshots/.
+// (`next start`) and saves desktop (1440px) and mobile (390px) screenshots of
+// every page to docs/screenshots/.
 //
-// Needs SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD (or the SEED_MODERATOR_* pair
-// the seed script uses) for an active ADMIN account, loaded from .env.local.
+// Uses only the neutral demo data: it seeds (or restores) the demo accounts
+// and the WD-DEMO sample cases in the database from .env.local, the same as
+// `npm run seed:demo -- --force`, and signs in as admin@whistledrop.demo. The
+// one report it submits (for the case code screen) is deleted afterwards. On
+// the Moderators page only demo accounts reach the browser, so no personal
+// address can appear in a screenshot.
 //
 // `npm run screenshots -- --only=dashboard,reports` retakes just those pages
 // (names: home, report, case-code, track, mod-login, dashboard, reports,
 // report-detail, moderators).
-//
-// Seeding is idempotent where it can be: it reuses reports from earlier runs
-// and only submits what's missing, because POST /api/reports allows 10
-// submissions per hour. Case codes are never printed.
 
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { chromium } from "playwright";
+import { prisma } from "../lib/db";
+import { deleteReportPermanently } from "../lib/cases";
+import { resetDemoCases, seedDemoAccounts, seedDemoCases } from "../lib/demo";
+import { DEMO_EMAILS, DEMO_PASSWORDS } from "../prisma/demo-credentials";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT_DIR = path.join(ROOT, "docs", "screenshots");
@@ -28,33 +31,16 @@ const PORT = Number(process.env.SCREENSHOTS_PORT ?? 3123);
 const BASE = `http://127.0.0.1:${PORT}`;
 const TOKEN_KEY = "whistledrop.moderatorToken"; // lib/client/session.ts
 
-const EMAIL = process.env.SEED_ADMIN_EMAIL ?? process.env.SEED_MODERATOR_EMAIL;
-const PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? process.env.SEED_MODERATOR_PASSWORD;
+const EMAIL = DEMO_EMAILS.admin;
+const PASSWORD = DEMO_PASSWORDS.admin;
 
 const VIEWPORTS = [
   { name: "desktop", viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
   { name: "mobile", viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 ];
 
-/** The showcase report: moved through several statuses, shown on the detail and Track screenshots. */
-const SHOWCASE = {
-  category: "CORRUPTION",
-  description:
-    "Invoices from one supplier are approved by the same manager who requested them, and three of last quarter's " +
-    "invoices were for equipment that never arrived. The purchase orders are dated after the payments went out.",
-  evidenceUrl: "https://example.org/procurement/q3-summary",
-};
-
-const FILLER = [
-  { category: "SECURITY", description: "The staff VPN still accepts accounts of people who left months ago; I could sign in with an old shared login." },
-  { category: "HARASSMENT", description: "A team lead repeatedly makes comments about new staff members' appearance in meetings and group chats." },
-  { category: "TECHNICAL", description: "The visitor sign-in kiosk keeps a full list of names and phone numbers visible to anyone who walks up to it." },
-  { category: "SECURITY", description: "Door codes for the server room are written on a sticky note inside the unlocked cupboard next to it." },
-  { category: "OTHER", description: "Safety inspection records for the loading dock appear to have been signed without the inspection taking place." },
-  { category: "CORRUPTION", description: "Hiring panel members were told in advance which candidate to score highest, before interviews happened." },
-];
-
-const MIN_REPORTS = 7;
+/** Sample cases (lib/demo.ts): an ongoing conversation, shown on Track and the report detail. */
+const SHOWCASE_CODE = "WD-DEMO-0001";
 
 const onlyArg = process.argv.find((a) => a.startsWith("--only="));
 const ONLY = onlyArg ? new Set(onlyArg.slice("--only=".length).split(",")) : null;
@@ -115,77 +101,12 @@ async function startServer() {
   fail(`next start didn't answer within 60s. Did \`next build\` run?\n${output}`);
 }
 
-// ── Seeding (API only) ───────────────────────────────────────────────────
-
-async function listAll(token) {
-  const page = await api("GET", "/api/mod/reports?pageSize=100", { token });
-  return page.items;
-}
-
-async function submit(report) {
-  const { caseCode } = await api("POST", "/api/reports", { body: report });
-  return caseCode;
-}
+// ── Data ─────────────────────────────────────────────────────────────────
 
 async function findIdByCode(token, caseCode) {
   const page = await api("GET", `/api/mod/reports?q=${encodeURIComponent(caseCode)}&pageSize=1`, { token });
-  if (!page.items[0]) fail("A report submitted by this script couldn't be found again");
+  if (!page.items[0]) fail(`${caseCode} not found`);
   return page.items[0].id;
-}
-
-const move = (token, id, newStatus, note, visibility = "PUBLIC") =>
-  api("PATCH", `/api/mod/reports/${id}/status`, { token, body: { newStatus, visibility, ...(note ? { note } : {}) } });
-
-async function seed(token) {
-  let reports = await listAll(token);
-
-  // 1. The showcase: RESOLVED, with a public and an internal update and an evidence link.
-  let showcase = null;
-  for (const r of reports.filter((r) => r.status === "RESOLVED")) {
-    const detail = await api("GET", `/api/mod/reports/${r.id}`, { token });
-    if (detail.evidenceUrl && detail.statusUpdates.length >= 2) {
-      showcase = detail;
-      break;
-    }
-  }
-  if (!showcase) {
-    const id = await findIdByCode(token, await submit(SHOWCASE));
-    await move(token, id, "UNDER_REVIEW", "Thanks for the detail. We've started looking into the purchase records.");
-    showcase = await move(
-      token,
-      id,
-      "RESOLVED",
-      "Finance confirmed the duplicate approvals. Referred to internal audit; supplier payments paused.",
-      "INTERNAL",
-    );
-    log("seeded the showcase report (SUBMITTED → UNDER_REVIEW → RESOLVED)");
-    reports = await listAll(token);
-  }
-
-  // 2. Enough reports that the tables and counts have something in them.
-  const missing = Math.max(0, MIN_REPORTS - reports.length);
-  for (const report of FILLER.slice(0, missing)) await submit(report);
-  if (missing) {
-    log(`submitted ${Math.min(missing, FILLER.length)} more report(s)`);
-    reports = await listAll(token);
-  }
-
-  // 3. A spread of statuses for the dashboard, keeping at least two awaiting review.
-  const submitted = () => reports.filter((r) => r.status === "SUBMITTED");
-  if (!reports.some((r) => r.status === "UNDER_REVIEW") && submitted().length > 2) {
-    await move(token, submitted().at(-1).id, "UNDER_REVIEW");
-    reports = await listAll(token);
-  }
-  if (!reports.some((r) => r.status === "DISMISSED" || r.status === "CLOSED") && submitted().length > 2) {
-    const id = submitted().at(-1).id;
-    await move(token, id, "UNDER_REVIEW");
-    await move(token, id, "DISMISSED", "Outside what this service can act on.", "INTERNAL");
-    await move(token, id, "CLOSED");
-    reports = await listAll(token);
-  }
-
-  log(`${reports.length} report(s) available`);
-  return showcase;
 }
 
 // ── Screenshots ──────────────────────────────────────────────────────────
@@ -203,6 +124,9 @@ async function shoot(page, file) {
   log(`saved docs/screenshots/${file}`);
 }
 
+/** Case codes of reports this run submitted; deleted at the end. */
+const submitted = new Set();
+
 async function capture(browser, vp, { token, showcase }) {
   const context = await browser.newContext({
     viewport: vp.viewport,
@@ -212,12 +136,23 @@ async function capture(browser, vp, { token, showcase }) {
     reducedMotion: "reduce", // reveals render immediately; no mid-animation frames
     colorScheme: "dark",
   });
+  // Only demo accounts reach the Moderators page.
+  await context.route("**/api/admin/moderators", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    body.items = body.items.filter((m) => m.isDemo);
+    await route.fulfill({ response, json: body });
+  });
   const page = await context.newPage();
   const file = (n, name) => `${String(n).padStart(2, "0")}-${name}-${vp.name}.png`;
 
   // Reporter pages
   if (wanted("home")) {
     await page.goto(`${BASE}/`);
+    // Wait until the demo video has its first frame, so its poster shows without the loading spinner.
+    await page.waitForFunction(() => [...document.querySelectorAll("video")].every((v) => v.readyState >= 2));
+    await page.waitForTimeout(1500);
     await shoot(page, file(1, "home"));
   }
 
@@ -241,12 +176,13 @@ async function capture(browser, vp, { token, showcase }) {
         .then(() => fail("POST /api/reports is rate limited (10 per hour). Try again later.")),
     ]);
     await page.evaluate(() => window.scrollTo(0, 0));
+    submitted.add((await page.locator("body").innerText()).match(/WD-[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0]);
     await shoot(page, file(3, "case-code"));
   }
 
   if (wanted("track")) {
     await page.goto(`${BASE}/track`);
-    await page.locator("#track-code").fill(showcase.caseCode);
+    await page.locator("#track-code").fill(SHOWCASE_CODE);
     await page.getByRole("button", { name: "Track" }).click();
     await page.getByRole("heading", { name: "Your Case", exact: true }).waitFor({ timeout: 20_000 });
     await shoot(page, file(4, "track"));
@@ -275,14 +211,14 @@ async function capture(browser, vp, { token, showcase }) {
 
   if (wanted("report-detail")) {
     await page.goto(`${BASE}/mod/reports/${showcase.id}`);
-    await page.getByRole("heading", { name: "History" }).waitFor();
+    await page.getByRole("heading", { name: "Conversation with reporter" }).waitFor();
     await shoot(page, file(8, "report-detail"));
   }
 
   if (wanted("moderators")) {
     await page.goto(`${BASE}/mod/moderators`);
     await page.getByRole("heading", { name: "Add a moderator" }).waitFor();
-    await page.getByText(EMAIL.toLowerCase()).filter({ visible: true }).first().waitFor();
+    await page.getByText(EMAIL).filter({ visible: true }).first().waitFor();
     await shoot(page, file(9, "moderators"));
   }
 
@@ -290,15 +226,17 @@ async function capture(browser, vp, { token, showcase }) {
 }
 
 async function main() {
-  if (!EMAIL || !PASSWORD) fail("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD (or SEED_MODERATOR_*) in .env.local");
   await mkdir(OUT_DIR, { recursive: true });
+  log("seeding demo accounts and restoring the sample cases");
+  await seedDemoCases(await seedDemoAccounts(DEMO_PASSWORDS));
+  await resetDemoCases();
 
   log(`starting next start on ${BASE}`);
   const server = await startServer();
   let browser;
   try {
     const { token } = await api("POST", "/api/mod/login", { body: { email: EMAIL, password: PASSWORD } });
-    const showcase = await seed(token);
+    const showcase = { caseCode: SHOWCASE_CODE, id: await findIdByCode(token, SHOWCASE_CODE) };
 
     browser = await chromium.launch();
     for (const vp of VIEWPORTS) await capture(browser, vp, { token, showcase });
@@ -306,6 +244,12 @@ async function main() {
   } finally {
     await browser?.close();
     server.kill("SIGTERM");
+    for (const caseCode of submitted) {
+      const report = caseCode && (await prisma.report.findUnique({ where: { caseCode }, select: { id: true } }));
+      if (report) await deleteReportPermanently(report.id);
+    }
+    if (submitted.size) log(`deleted the ${submitted.size} report(s) submitted for the case code screen`);
+    await prisma.$disconnect();
   }
 }
 

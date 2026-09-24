@@ -1,0 +1,97 @@
+.section {
+  background: var(--ink-950);
+  color: var(--text-light);
+  /* Clears the floating nav when reached through /#demo. */
+  scroll-margin-top: 96px;
+}
+
+.title {
+  margin: 28px 0 24px;
+}
+
+.lede {
+  max-width: 60ch;
+  color: var(--text-muted);
+}
+
+.player {
+  display: grid;
+  gap: 28px;
+  margin-top: 56px;
+}
+
+/* 4px radius, one hairline, no shadow. */
+.frame {
+  overflow: hidden;
+  border: 1px solid var(--line-dark);
+  border-radius: 4px;
+  background: var(--ink-900);
+}
+
+.video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1440 / 900;
+}
+
+.chapters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+/* EyebrowTag's look, as buttons. */
+.chapter {
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.chapter:hover,
+.chapter[aria-current="true"] {
+  background: rgba(189, 252, 138, 0.18);
+  border-color: var(--lime-500);
+}
+
+.chapterTime {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tryIt {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.summary {
+  border-top: 1px solid var(--line-dark);
+  padding-top: 16px;
+  color: var(--text-muted);
+}
+
+.summary summary {
+  cursor: pointer;
+  color: var(--text-light);
+}
+
+.summary ol {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding-left: 20px;
+  list-style: decimal;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.summary strong {
+  color: var(--text-light);
+  font-weight: 400;
+}
+
+@media (max-width: 767px) {
+  .player {
+    margin-top: 40px;
+  }
+}

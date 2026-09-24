@@ -23,6 +23,8 @@ export const QUICK_EXIT_URL = "https://www.google.com";
  */
 export const ROUTES = {
   home: "/",
+  /** The walkthrough video section on the home page; works from any page. */
+  demo: "/#demo",
   report: "/report",
   track: "/track",
   modLogin: "/mod/login",
@@ -45,6 +47,7 @@ export const PUBLIC_NAV: readonly NavLink[] = [
   { href: ROUTES.home, label: "Home" },
   { href: ROUTES.report, label: "Report" },
   { href: ROUTES.track, label: "Track" },
+  { href: ROUTES.demo, label: "Demo" },
   { href: ROUTES.modLogin, label: "Moderators" },
 ];
 

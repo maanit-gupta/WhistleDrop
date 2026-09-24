@@ -54,6 +54,7 @@ describe("page CSP (proxy.ts)", () => {
     expect(csp["style-src"]).toEqual(["'self'", "'unsafe-inline'"]);
     expect(csp["img-src"]).toEqual(["'self'", "data:", "blob:"]);
     expect(csp["font-src"]).toEqual(["'self'"]);
+    expect(csp["media-src"]).toEqual(["'self'"]);
     expect(csp["object-src"]).toEqual(["'none'"]);
     expect(csp["base-uri"]).toEqual(["'self'"]);
     expect(csp["form-action"]).toEqual(["'self'"]);

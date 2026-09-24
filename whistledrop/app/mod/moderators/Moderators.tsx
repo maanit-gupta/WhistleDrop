@@ -109,10 +109,9 @@ export function Moderators() {
       cell: (m) => {
         const state = rows[m.id];
         const nextRole: ModeratorRole = m.role === "ADMIN" ? "MODERATOR" : "ADMIN";
-        // The server refuses any role or status change to a demo account; don't offer one.
-        if (m.isDemo) {
-          return <span className={styles.you}>Protected demo account</span>;
-        }
+        // Demo accounts (tagged DEMO) keep their buttons: the server refuses the change
+        // with DEMO_ACCOUNT_PROTECTED, and that refusal is shown in the row, which is
+        // how reviewers see the protection working.
         return (
           <div className={styles.actions}>
             <div className={styles.buttons}>
