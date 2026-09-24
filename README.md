@@ -12,7 +12,7 @@ An anonymous reporting service. Submit a report without an account, get a case c
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20Storage-3ecf8e?logo=supabase&logoColor=white)
 ![Vitest](https://img.shields.io/badge/tested%20with-Vitest-6e9f18?logo=vitest&logoColor=white)
 
-[**Live app**](<LIVE_URL>) · [**API docs**](<LIVE_URL>/api-docs) · [**Full documentation**](whistledrop/README.md)
+[**Live app**](<LIVE_URL>) · [**API docs**](<LIVE_URL>/api-docs) · [**Full documentation**](whistledrop/README.md) · [**Demo sign-ins**](whistledrop/DUMMY_SIGN_INS.txt)
 
 <img src="whistledrop/docs/screenshots/01-home-desktop.png" alt="WhistleDrop home page" width="820">
 
@@ -22,8 +22,8 @@ An anonymous reporting service. Submit a report without an account, get a case c
 
 WhistleDrop is my submission for the **GDG on Campus SRM** Technical Domain brief, *"WhistleDrop — Speak Without Being Seen"*.
 
-- **Reporters** choose a category and describe the issue. They can add a link and up to three evidence files. In return they get a case code such as `WD-7K2P-Q9XM`, which they use to track the case. There's no account and no email, and nothing links the code back to them.
-- **Moderators** sign in to a dashboard where they can search and filter reports and download evidence through links that expire after 60 seconds. They move each case through `SUBMITTED → UNDER_REVIEW → RESOLVED | DISMISSED → CLOSED` and can attach notes that are either shown to the reporter or kept internal. Closing a case makes it read-only permanently and deletes its evidence.
+- **Reporters** choose a category and describe the issue. They can add a link and up to three evidence files. In return they get a case code such as `WD-7K2P-Q9XM`, which they use to track the case and talk to the review team anonymously. There's no account and no email, and nothing links the code back to them.
+- **Moderators** sign in to a dashboard where they can search and filter reports and download evidence through links that expire after 60 seconds. They move each case through `SUBMITTED → UNDER_REVIEW → RESOLVED | DISMISSED → CLOSED` reply to the reporter (who only ever sees "the review team"), and keep staff-only internal notes. Closing a case makes it read-only permanently and deletes its evidence.
 
 ## Highlights
 
@@ -33,6 +33,7 @@ WhistleDrop is my submission for the **GDG on Campus SRM** Technical Domain brie
 | 🧼 **Metadata stripped** | Every image is re-encoded, which removes EXIF data such as GPS location and device model. Uploads are checked by their magic bytes, not the name the client gives them. |
 | 🔒 **Locked-down headers** | A nonce-based CSP, `no-referrer`, `no-store` on the API, no analytics, and fonts served from our own origin. |
 | 🚪 **Safe exits** | A "Leave site" button on every reporter page, and a warning before any link that leaves WhistleDrop. |
+| 💬 **Anonymous conversation** | Reporters and moderators can message each other through the case code. Messages store only their text; moderators appear as "Review team"; internal notes are a separate staff-only channel. |
 | 🛡️ **Accountable staff** | Every status change records which moderator made it. Roles are re-checked against the database on every request, and the last admin can't be removed. |
 | 📖 **Documented API** | An OpenAPI 3.1 spec generated from the same Zod schemas that validate requests, with Swagger UI at `/api-docs`. |
 | ✅ **Tested** | Unit tests, integration tests against a real Postgres, and end-to-end CSP tests against the production build. |
@@ -102,10 +103,10 @@ The full setup guide, including where to find each Supabase key and every enviro
 The app lives in [`whistledrop/`](whistledrop/). Its [README](whistledrop/README.md) is the full submission document:
 
 - [Architecture](whistledrop/README.md#architecture) and [status workflow](whistledrop/README.md#status-workflow)
-- [How anonymity is maintained](whistledrop/README.md#how-anonymity-is-maintained) and [security decisions](whistledrop/README.md#security-decisions)
+- [The conversation model](whistledrop/README.md#the-conversation-model), [how anonymity is maintained](whistledrop/README.md#how-anonymity-is-maintained) and [security decisions](whistledrop/README.md#security-decisions)
 - [Evidence upload flow](whistledrop/README.md#evidence-upload-flow)
 - [API reference](whistledrop/README.md#api-reference) and [curl examples for a full case lifecycle](whistledrop/README.md#example-requests-a-full-case-lifecycle)
-- [Deployment on Vercel](whistledrop/README.md#deployment-vercel)
+- [Deployment on Vercel](whistledrop/README.md#deployment-vercel) and the [protected demo accounts](whistledrop/README.md#demo-accounts) ([`DUMMY_SIGN_INS.txt`](whistledrop/DUMMY_SIGN_INS.txt))
 - [Known limitations](whistledrop/README.md#known-limitations)
 
 ## Acknowledgements

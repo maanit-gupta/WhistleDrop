@@ -11,6 +11,7 @@
 - **Live app:** <LIVE_URL>
 - **Interactive API docs (Swagger UI):** <LIVE_URL>/api-docs
 - **Source:** https://github.com/maanit-gupta/WhistleDrop
+- **Try it as a moderator:** public demo accounts and sample case codes are in [`DUMMY_SIGN_INS.txt`](DUMMY_SIGN_INS.txt) (see [Demo accounts](#demo-accounts)).
 
 ## Contents
 
@@ -20,26 +21,28 @@
 4. [Tech stack](#tech-stack)
 5. [Architecture](#architecture)
 6. [Status workflow](#status-workflow)
-7. [How anonymity is maintained](#how-anonymity-is-maintained)
-8. [Security decisions](#security-decisions)
-9. [Evidence upload flow](#evidence-upload-flow)
-10. [API reference](#api-reference)
-11. [Example requests: a full case lifecycle](#example-requests-a-full-case-lifecycle)
-12. [Local setup](#local-setup)
-13. [Testing](#testing)
-14. [Deployment (Vercel)](#deployment-vercel)
-15. [Design decisions and assumptions](#design-decisions-and-assumptions)
-16. [Known limitations](#known-limitations)
-17. [Future improvements](#future-improvements)
-18. [Acknowledgements](#acknowledgements)
+7. [The conversation model](#the-conversation-model)
+8. [How anonymity is maintained](#how-anonymity-is-maintained)
+9. [Security decisions](#security-decisions)
+10. [Evidence upload flow](#evidence-upload-flow)
+11. [API reference](#api-reference)
+12. [Example requests: a full case lifecycle](#example-requests-a-full-case-lifecycle)
+13. [Local setup](#local-setup)
+14. [Testing](#testing)
+15. [Deployment (Vercel)](#deployment-vercel)
+16. [Demo accounts](#demo-accounts)
+17. [Design decisions and assumptions](#design-decisions-and-assumptions)
+18. [Known limitations](#known-limitations)
+19. [Future improvements](#future-improvements)
+20. [Acknowledgements](#acknowledgements)
 
 ## Overview
 
 WhistleDrop is my submission for the GDG on Campus SRM Technical Domain brief, **"WhistleDrop — Speak Without Being Seen"**. People who witness wrongdoing (a security hole, harassment, corruption, a technical fault) often stay quiet because reporting it could expose them. The brief asks for a platform where anyone can report an issue anonymously, follow what happens to it, and where a moderation team can review and act on reports without ever learning who sent them.
 
-**For reporters**, WhistleDrop needs no account, no email and no login. A reporter picks a category, describes the issue, and can optionally add a link and up to three evidence files (images or PDFs). They get back a case code such as `WD-7K2P-Q9XM`. That code is the only way back to the report: entering it on the Track page shows the current status and every note the moderators chose to make public. Nothing links the code to the person who holds it.
+**For reporters**, WhistleDrop needs no account, no email and no login. A reporter picks a category, describes the issue, and can optionally add a link and up to three evidence files (images or PDFs). They get back a case code such as `WD-7K2P-Q9XM`. That code is the only way back to the report: entering it on the Track page shows the current status and an anonymous conversation with the review team, where the reporter can answer questions and add details. Nothing links the code to the person who holds it.
 
-**For moderators**, there is a signed-in area at `/mod` with a dashboard of case counts, a searchable and filterable list of reports, and a detail page for each report. There they can download evidence through short-lived links, move the case through a fixed workflow, and attach notes that are either shown to the reporter (PUBLIC) or kept to the team (INTERNAL). Admins also manage moderator accounts. When a case is finished it is closed permanently and its evidence files are deleted.
+**For moderators**, there is a signed-in area at `/mod` with a dashboard of case counts, a searchable and filterable list of reports, and a detail page for each report. There they can download evidence through short-lived links, move the case through a fixed workflow, reply to the reporter (who only ever sees "the review team"), and keep staff-only internal notes. Admins also manage moderator accounts. When a case is finished it is closed permanently and its evidence files are deleted.
 
 ## Screenshots
 
@@ -118,17 +121,19 @@ Captured from the production build by `npm run screenshots` at 1440 px (desktop)
 
 - **Anonymous submission.** A report has a category (Security, Harassment, Corruption, Technical, Other), a description of 20 to 5,000 characters, and an optional `http`/`https` evidence link. No account, name, email or contact detail is asked for or accepted.
 - **Case code.** Each submission returns a random code in the form `WD-XXXX-XXXX`. The reporter can copy it or download it as a text file. It is shown once and is never put in a URL or browser storage.
-- **Case tracking.** Entering the code on `/track` shows the category, description, current status and a timeline of PUBLIC moderator notes. The input accepts lowercase, spaces, missing dashes and a missing `WD` prefix.
+- **Case tracking.** Entering the code on `/track` shows the category, description, current status and the conversation with the review team: messages, every status change and any PUBLIC note. The input accepts lowercase, spaces, missing dashes and a missing `WD` prefix.
+- **Anonymous two-way conversation.** The reporter can reply from `/track` (1 to 2,000 characters, line breaks kept); moderators reply from the report page. Moderators appear to the reporter only as "Review team", and a message stores its text and nothing about the sender. Internal notes are a separate, staff-only channel. See [The conversation model](#the-conversation-model).
 - **Moderator login.** Email and password, returning a 12-hour bearer token.
-- **Status updates with notes.** Moderators move reports through `SUBMITTED → UNDER_REVIEW → RESOLVED | DISMISSED → CLOSED`, optionally with a note on each change.
+- **Status updates with notes.** Moderators move reports through `SUBMITTED → UNDER_REVIEW → RESOLVED | DISMISSED → CLOSED`, optionally with a note on each change (PUBLIC, shown in the conversation, or INTERNAL).
 
 ### Brownie points implemented
 
-- **Moderator and admin dashboard.** A signed-in area with case counts by status and category, recent reports, a full reports list, a report detail page and, for admins, moderator management (create accounts, change roles, deactivate and reactivate). Roles are `ADMIN` and `MODERATOR`.
+- **Moderator and admin dashboard.** A signed-in area with case counts by status and category, an "Awaiting Reply" count for cases where the reporter wrote last, recent reports, a full reports list, a report detail page and, for admins, moderator management (create accounts, change roles, deactivate and reactivate). Roles are `ADMIN` and `MODERATOR`.
 - **Permanent closure.** `CLOSED` is terminal and read-only. Closing deletes every evidence file for the report, and any later change is refused with `423 REPORT_CLOSED`.
-- **Extra privacy protections.** Daily-rotating hashed IPs used only as rate-limit keys, EXIF stripping, PUBLIC and INTERNAL notes, row-level security lockdown, nonce-based CSP, `no-referrer`, a warning before every outbound link, a quick-exit button, no analytics and self-hosted fonts. See [How anonymity is maintained](#how-anonymity-is-maintained).
+- **Extra privacy protections.** Daily-rotating hashed IPs used only as rate-limit keys, EXIF stripping, a conversation that stores nothing about the reporter, staff-only internal notes, case codes sent in request bodies rather than URLs, row-level security lockdown, nonce-based CSP, `no-referrer`, a warning before every outbound link, a quick-exit button, no analytics and self-hosted fonts. See [How anonymity is maintained](#how-anonymity-is-maintained).
 - **Evidence upload.** Up to three JPEG, PNG, WebP or PDF files of up to 10 MB each, uploaded straight to a private Supabase Storage bucket, checked by magic bytes, and (for images) re-encoded to remove metadata.
-- **Search and advanced filtering.** Case-insensitive search over description and case code, multi-select status and category filters, a created-at date range, sorting by created, updated or status, and pagination.
+- **Search and advanced filtering.** Case-insensitive search over description and case code, multi-select status and category filters, a created-at date range, an "Awaiting reply" filter (rows show a REPLY tag), sorting by created, updated or status, and pagination.
+- **Public demo accounts.** An admin and two moderators whose credentials are published in [`DUMMY_SIGN_INS.txt`](DUMMY_SIGN_INS.txt), locked down on the server, plus five sample cases. See [Demo accounts](#demo-accounts).
 - **Swagger / OpenAPI.** An OpenAPI 3.1 document generated from the same Zod schemas the API validates with, served at `/api/openapi` and rendered by Swagger UI at `/api-docs`, with a working **Authorize** button for moderator tokens.
 - **Automated tests.** Unit tests with mocked dependencies, integration tests against a real disposable Postgres, and end-to-end CSP tests against the production build.
 - **Deployment.** Configured for Vercel, with a daily cleanup cron job.
@@ -162,10 +167,12 @@ whistledrop/
 │   │   └── ModShell.tsx                 Client-side guard: redirects to login without a token (UX only)
 │   ├── api/
 │   │   ├── reports/route.ts             POST   submit a report (with attachments)
-│   │   ├── reports/[caseCode]/route.ts  GET    reporter lookup (PUBLIC updates only)
+│   │   ├── reports/lookup/route.ts      POST   reporter lookup, case code in the body (preferred)
+│   │   ├── reports/[caseCode]/route.ts  GET    the same lookup, kept for API compatibility
+│   │   ├── reports/messages/route.ts    POST   reporter message in the conversation
 │   │   ├── uploads/sign/route.ts        POST   signed upload URL + upload token
 │   │   ├── mod/login/route.ts           POST   moderator login
-│   │   ├── mod/reports/…                GET list, GET detail, PATCH status, GET attachment link
+│   │   ├── mod/reports/…                GET list, GET detail, PATCH status, POST messages, POST notes, GET attachment link
 │   │   ├── admin/moderators/…           GET/POST list and create, PATCH role / active
 │   │   ├── openapi/route.ts             GET    OpenAPI 3.1 document
 │   │   └── cron/cleanup/route.ts        GET    daily cleanup (Vercel Cron, CRON_SECRET)
@@ -178,6 +185,9 @@ whistledrop/
 │   ├── transitions.shared.ts            The allowed status transitions, imported by both the API and the browser UI
 │   ├── validation.ts                    Server-only Zod schemas; the single source for request validation and the OpenAPI spec
 │   ├── validation.client.ts             Plain-Zod browser copy of the report form rules (a test keeps it in sync with the server)
+│   ├── cases.ts                         The case workflow (create, status, messages, notes), shared by routes and the demo seed
+│   ├── caseLookup.ts                    The public lookup response, shared by the GET and POST lookup routes
+│   ├── demo.ts                          Demo accounts, sample cases, and the daily demo-account reset
 │   ├── caseCode.ts                      CSPRNG case code generation
 │   ├── rateLimit.ts                     Upstash sliding windows keyed by a daily-rotating IP HMAC
 │   ├── uploads.ts                       Magic-byte checks, sharp re-encoding, all-or-nothing attachment storage
@@ -186,13 +196,14 @@ whistledrop/
 │   ├── env.ts                           Validation of every server environment variable
 │   ├── openapi.ts, zodOpenApi.ts        OpenAPI registry and document
 │   ├── apiResponse.ts                   JSON success/error helpers (always Cache-Control: no-store)
-│   ├── reports.ts, db.ts, site.ts       Report detail shape, Prisma client, site constants and routes
+│   ├── reports.ts, db.ts, site.ts       Public and moderator case shapes (conversation merge), Prisma client, site constants
 │   └── client/                          Browser-only: typed API client, session (sessionStorage), case code input
 ├── proxy.ts                             Next.js proxy (formerly middleware): per-request CSP nonce for pages
-├── prisma/                              schema.prisma, migrations/, seed.ts
-├── scripts/                             setup-storage.ts, check-env.ts, copy-swagger-ui.mjs, screenshots.mjs
+├── prisma/                              schema.prisma, migrations/, seed.ts (first admin), seed-demo.ts (demo accounts + cases)
+├── scripts/                             setup-storage.ts, check-env.ts, deactivate-account.ts, copy-swagger-ui.mjs, screenshots.mjs
 ├── tests/                               Unit, integration/ and e2e/ suites plus helpers/
 ├── docs/                                Frontend API contract and screenshots
+├── DUMMY_SIGN_INS.txt                   Public demo credentials and sample case codes for reviewers
 ├── compose.test.yml                     Disposable Postgres for the integration tests
 └── vercel.json                          Daily cron schedule
 ```
@@ -230,9 +241,35 @@ A few files are worth explaining:
 
 Only these five transitions exist. Anything else returns `409 INVALID_TRANSITION`: skipping review, reopening a resolved or dismissed report, or "changing" a status to the one it already has.
 
-**CLOSED is permanent and read-only.** Closing sets `closedAt`. After that, every `PATCH` to the report, from any role, returns `423 REPORT_CLOSED`. The report, its history and the reporter's case-code lookup stay available.
+**CLOSED is permanent and read-only.** Closing sets `closedAt` and clears `awaitingReply`. After that, every status change, message and internal note, from any role and from the reporter, returns `423 REPORT_CLOSED`. The report, its history and the full conversation stay readable through the reporter's case-code lookup.
+
+Every status change appears in the reporter's conversation as a system event. A `PUBLIC` note is shown inside that event; an `INTERNAL` note is not (it appears under the moderators' internal notes).
 
 **Evidence is purged when a case closes.** Before the report is marked closed, the route deletes every file of the report from storage: the files its `Attachment` rows point to, plus anything else under the report's `reports/<id>/` folder. The attachment rows are then deleted in the same transaction that sets the status. The files go first on purpose: if deletion fails, the request returns `500`, nothing in the database has changed, and the close can simply be retried. The opposite order could leave a closed report whose files still exist.
+
+## The conversation model
+
+Every case has two separate channels:
+
+| Channel | Who writes | Who reads | Stored as |
+| --- | --- | --- | --- |
+| **Conversation** | The reporter (with the case code) and moderators | The reporter and moderators | `CaseMessage` rows, plus every `StatusUpdate` as a system event |
+| **Internal notes** | Moderators | Moderators only | `InternalNote` rows, plus the notes of `INTERNAL` status updates |
+
+**What the reporter sees.** The public lookup returns `conversation`, one chronological list that merges:
+
+- messages: `{ type: "message", author: "REPORTER" | "REVIEW_TEAM", body, createdAt }`
+- status changes: `{ type: "status", status, note?, createdAt }`, where `note` is present only for a `PUBLIC` note.
+
+No ids, no moderator ids or emails, no visibility flags and no `INTERNAL` notes ever leave the server on this path. Every moderator is simply `REVIEW_TEAM`. The older `statusUpdates` field (PUBLIC updates only) is still returned for compatibility.
+
+**What moderators see.** `GET /api/mod/reports/{id}` returns the same `conversation` (identical entries and notes) with the moderator behind each entry, for accountability, and `internalNotes` separately: internal notes and `INTERNAL` status updates, each with its author. On the report page these are two clearly labelled blocks. The reply composer ("Reply to reporter — visible to the reporter") has the lime button; the internal-note composer ("Internal note — never visible to the reporter") has an outlined button and a dashed frame, so the two can't be confused. `POST /api/mod/reports/{id}/notes` has no visibility option at all: anything meant for the reporter goes through the messages endpoint.
+
+**Awaiting reply.** `Report.awaitingReply` is set when the reporter posts and cleared when a moderator replies or the case closes, in the same transaction as the message insert or status change. The dashboard counts it, and the reports list can filter by it and tags those rows REPLY.
+
+**Closed cases.** A reporter or moderator message to a CLOSED case gets `423` with "This case is closed. The conversation is read-only." The whole thread stays readable, and `/track` replaces the reply box with that sentence. Posting and closing both lock the report row, so a message can't slip in after a close commits.
+
+**Abuse limits.** Reporter messages are limited to 10 per hour per client and case code (the key is an HMAC of the IP and the code together, so neither reaches Redis in clear). Each message request also counts against the per-IP lookup budget, because a wrong code gets the lookup's 404 and the endpoint could otherwise be used to guess codes.
 
 ## How anonymity is maintained
 
@@ -240,15 +277,17 @@ Only these five transitions exist. Anything else returns `409 INVALID_TRANSITION
 
 The database holds exactly these tables:
 
-- **Report:** internal `id`, `caseCode`, `category`, `description`, `evidenceUrl`, `status`, `createdAt`, `updatedAt`, `closedAt`.
+- **Report:** internal `id`, `caseCode`, `category`, `description`, `evidenceUrl`, `status`, `awaitingReply`, `createdAt`, `updatedAt`, `closedAt`.
+- **CaseMessage:** `id`, `reportId`, `authorType` (`REPORTER` or `MODERATOR`), `moderatorId` (only on moderator messages; a CHECK constraint enforces it), `body`, `createdAt`. A reporter message is its text and a timestamp: no IP, no IP hash, no user agent, nothing else.
+- **InternalNote:** `id`, `reportId`, `moderatorId`, `body`, `createdAt`. Staff only.
 - **StatusUpdate:** `id`, `reportId`, `note`, `visibility`, `newStatus`, `moderatorId` (the moderator who acted, never the reporter), `createdAt`.
 - **Attachment:** `id`, `reportId`, `storagePath`, `mimeType`, `sizeBytes`, `createdAt`.
 - **ConsumedUploadToken:** `jti` (a random token id) and `consumedAt`.
-- **Moderator:** `id`, `email`, `passwordHash`, `role`, `isActive`, `createdAt`.
+- **Moderator:** `id`, `email`, `passwordHash`, `role`, `isActive`, `isDemo`, `createdAt`.
 
 Storage holds sanitized evidence under `reports/<reportId>/` until the case closes, and staged uploads under `staging/` until they are attached or cleaned up.
 
-WhistleDrop **never stores** a reporter's IP address, user agent, cookies, session id, device fingerprint, email or account, in Postgres, in storage metadata or in its own logs. The submission handler builds database rows only from validated body fields, and the strict schema rejects any extra field, so a client can't slip extra data in. The unit tests check that request headers never reach the database. Reporter pages set no cookies, and the API client sends none.
+WhistleDrop **never stores** a reporter's IP address, user agent, cookies, session id, device fingerprint, email or account, in Postgres, in storage metadata or in its own logs. The submission and message handlers build database rows only from validated body fields, and the strict schemas reject any extra field, so a client can't slip extra data in. The tests check that request headers and the sender's IP never reach the database, for reports and for messages. Messages are the reporter's own words, so `/track` reminds them not to include their name or anything that could identify them. Reporter pages set no cookies, and the API client sends none.
 
 ### The case-code model
 
@@ -258,7 +297,7 @@ Codes are normalised before lookup. In the browser, `lib/client/caseCode.ts` acc
 
 The case code is a bearer secret: anyone who has it can read that report's public view. The UI keeps it in React state only. It is never put in the page URL, browser storage or the console, and the downloadable text file's name doesn't contain it.
 
-**The lookup uses GET.** The public lookup is `GET /api/reports/{caseCode}`, so the code is part of the request path. It never appears in the address bar or history, but **the hosting provider's request logs (Vercel) record URL paths, and therefore case codes**. Moving the lookup to a `POST` body is listed under [Future improvements](#future-improvements).
+**The code travels in request bodies.** The Track page uses `POST /api/reports/lookup { caseCode }` and `POST /api/reports/messages { caseCode, body }`, so the code never appears in a URL: not in the address bar or history, and not in the request paths the hosting provider (Vercel) logs. **`POST /api/reports/lookup` is the preferred lookup.** The original `GET /api/reports/{caseCode}` still works, with an identical response, for API compatibility, but it puts the code in the path, where hosting request logs can record it.
 
 ### The daily-rotating IP hash
 
@@ -268,19 +307,19 @@ Rate limiting needs some notion of "the same client" without storing who that cl
 
 Every image (JPEG, PNG, WebP) is decoded and re-encoded with sharp. It is auto-rotated first, so it keeps its orientation once the EXIF orientation tag is gone. sharp writes no metadata unless asked to, so EXIF (including GPS coordinates, device make and model, and capture time), XMP, IPTC and embedded comments are all dropped. The integration tests check this for all three formats. **PDFs are not sanitized** (see [Known limitations](#known-limitations)).
 
-### PUBLIC vs INTERNAL notes
+### PUBLIC vs INTERNAL notes, and the conversation
 
-Every status update carries a visibility, `PUBLIC` by default. The reporter's lookup filters INTERNAL updates out **in the database query** and returns only `note`, `newStatus` and `createdAt` for each PUBLIC one: never ids, visibility or anything about the moderator. Moderators see every update with its visibility and author.
+Every status update carries a visibility, `PUBLIC` by default, which applies to its note. The status change itself is always shown to the reporter as an event in the conversation; its note is included only when `PUBLIC`. The public lookup's database query never selects a moderator id or email, and `lib/reports.ts` builds the reporter's view from an explicit allowlist of fields, so ids, visibility and moderator details can't leak. Moderator replies are attributed only to `REVIEW_TEAM`. Internal notes (`POST /api/mod/reports/{id}/notes`) are a separate table that the public path never reads. Moderators see everything, with authors.
 
 ### The staff audit trail
 
-Every status update records the acting moderator (`moderatorId`). The foreign key uses `ON DELETE RESTRICT`, so a moderator with history can't be deleted, even outside the API. This makes moderators accountable for what they do with a report.
+Every status update, moderator message and internal note records the acting moderator (`moderatorId`). The foreign key uses `ON DELETE RESTRICT`, so a moderator with history can't be deleted, even outside the API. This makes moderators accountable for what they do with a report.
 
 The trail cannot identify reporters, because there is nothing about the reporter to record. A report row has no link to any person, device or network. Moderators see the report's content, its case code and the history of staff actions, and nothing else.
 
 ### Row-level security lockdown
 
-Supabase exposes the `public` schema through its Data API (PostgREST) to anyone with the project's anon key. The migrations enable row-level security with **no policies** on every table (`Report`, `StatusUpdate`, `Moderator`, `Attachment`, `ConsumedUploadToken`), so the Data API can neither read nor write anything. Prisma connects as the table owner, which bypasses RLS, so the app itself is unaffected.
+Supabase exposes the `public` schema through its Data API (PostgREST) to anyone with the project's anon key. The migrations enable row-level security with **no policies** on every table (`Report`, `StatusUpdate`, `CaseMessage`, `InternalNote`, `Moderator`, `Attachment`, `ConsumedUploadToken`), so the Data API can neither read nor write anything. Prisma connects as the table owner, which bypasses RLS, so the app itself is unaffected.
 
 ### ConsumedUploadToken
 
@@ -310,17 +349,19 @@ Every reporter page has a **Leave site** button. It calls `location.replace()` t
 ## Security decisions
 
 - **Timing-safe login.** When the email is unknown, the password is still checked against a fixed dummy bcrypt hash, so response time doesn't reveal which emails belong to moderators. Unknown email, wrong password and deactivated account all get the same `401 INVALID_CREDENTIALS` with the same message. The cron secret is compared with `crypto.timingSafeEqual` over SHA-256 digests.
-- **Identical generic 404s.** An unknown case code and a malformed one get exactly the same `404 NOT_FOUND` "Report not found", so a guesser can't tell "wrong format" from "doesn't exist". The lookup's rate limit is counted before any validation, so malformed guesses use up the budget too. Moderator routes do the same for malformed and unknown ids.
+- **Identical generic 404s.** An unknown case code and a malformed one get exactly the same `404 NOT_FOUND` "Report not found", from both lookup routes and from the reporter message endpoint, so a guesser can't tell "wrong format" from "doesn't exist". The lookup's rate limit is counted before any validation, so malformed guesses use up the budget too. Moderator routes do the same for malformed and unknown ids.
 - **Concurrency-safe status updates.** The status route validates the transition, then in one transaction updates the report only `WHERE id = … AND status = <the status it validated>`, inserts the status update and (when closing) deletes the attachment rows. If two moderators act at once, exactly one wins. The other gets `409 CONFLICT`, or `423` if the winner closed the report.
 - **Roles checked against the database on every request.** The JWT carries the role only for the UI. `withModerator` re-reads the account on every request, so deactivation and demotion take effect on the very next request, not when the 12-hour token expires.
 - **Admins can't lock themselves out.** An admin can't demote or deactivate their own account (`403 CANNOT_MODIFY_SELF`).
+- **Demo accounts are locked down.** Their credentials are public, so the server refuses any role or active-status change to a demo account (`403 DEMO_ACCOUNT_PROTECTED`), refuses any role or active-status change *by* a demo account to another account, and lets demo accounts create only `MODERATOR` accounts (`403 DEMO_ACCOUNT_RESTRICTED`). The daily cron restores them. See [Demo accounts](#demo-accounts).
 - **The last admin can't be removed.** Role and active changes lock every active admin row (`SELECT … FOR UPDATE`) inside a transaction. Even two admins demoting each other at the same moment can't leave zero (`409 LAST_ADMIN`), and the caller's own admin status is re-checked after the lock.
 - **Moderators with history can only be deactivated.** There is no delete endpoint, and the `ON DELETE RESTRICT` foreign key stops the database deleting a moderator who has written status updates. Deactivating (`isActive: false`) blocks the account immediately and keeps the audit trail intact.
 - **Rate limits.** Sliding windows per client, using the hashed-IP key described above:
 
   | Endpoint | Limit |
   | --- | --- |
-  | `GET /api/reports/:caseCode` | 30 per 15 minutes |
+  | `POST /api/reports/lookup` and `GET /api/reports/:caseCode` (one shared budget) | 30 per 15 minutes |
+  | `POST /api/reports/messages` | 10 per hour per client **and case code**, and each request also counts against the lookup budget |
   | `POST /api/reports` | 10 per hour |
   | `POST /api/uploads/sign` | 30 per hour |
   | `POST /api/mod/login` | 10 per 15 minutes |
@@ -376,18 +417,22 @@ All request and response bodies are JSON, and every API response has `Cache-Cont
 | --- | --- | --- | --- | --- | --- |
 | `POST` | `/api/uploads/sign` | None (rate limited) | `{ mimeType, sizeBytes }` | `200 { uploadUrl, uploadToken, expiresIn: 1800 }` | 400, 429, 500, 503 |
 | `POST` | `/api/reports` | None (rate limited) | `{ category, description, evidenceUrl?, attachments? }` | `201 { caseCode }` | 400 `BAD_REQUEST` `VALIDATION_ERROR` `INVALID_UPLOAD_TOKEN` `INVALID_UPLOAD`, 409 `UPLOAD_TOKEN_USED`, 429, 500, 503 |
-| `GET` | `/api/reports/:caseCode` | None (rate limited) | Case code in the path (case-insensitive) | `200 { category, description, evidenceUrl, status, createdAt, statusUpdates: [{ note, newStatus, createdAt }] }`, PUBLIC updates only | 404, 429, 500, 503 |
+| `POST` | `/api/reports/lookup` (preferred) | None (rate limited) | `{ caseCode }` (case-insensitive) | `200 { category, description, evidenceUrl, status, createdAt, statusUpdates: [{ note, newStatus, createdAt }], conversation: [...] }`; `statusUpdates` is PUBLIC only; see [The conversation model](#the-conversation-model) | 400, 404, 429, 500, 503 |
+| `GET` | `/api/reports/:caseCode` | None (rate limited) | Case code in the path | Identical to `POST /api/reports/lookup`. Kept for compatibility; prefer POST, which keeps the code out of request logs | 404, 429, 500, 503 |
+| `POST` | `/api/reports/messages` | None (rate limited) | `{ caseCode, body }` | `201 { conversation }` | 400, 404 (same as the lookup), 423 `REPORT_CLOSED`, 429, 500, 503 |
 | `POST` | `/api/mod/login` | None (rate limited) | `{ email, password }` | `200 { token, tokenType: "Bearer", expiresIn: 43200 }` | 400, 401 `INVALID_CREDENTIALS`, 429, 500, 503 |
-| `GET` | `/api/mod/reports` | Bearer (any role) | Query: `q`, `status`, `category`, `from`, `to`, `sort`, `order`, `page`, `pageSize` | `200 { items: [{ id, caseCode, category, status, createdAt, updatedAt, closedAt }], page, pageSize, total, totalPages }` | 400, 401, 500 |
-| `GET` | `/api/mod/reports/:id` | Bearer (any role) | Report id in the path | `200` full report: all fields, every status update with `visibility` and `moderator { id, email }`, and `attachments [{ id, mimeType, sizeBytes, createdAt }]` | 401, 404, 500 |
+| `GET` | `/api/mod/reports` | Bearer (any role) | Query: `q`, `status`, `category`, `from`, `to`, `awaitingReply`, `sort`, `order`, `page`, `pageSize` | `200 { items: [{ id, caseCode, category, status, createdAt, updatedAt, closedAt, awaitingReply }], page, pageSize, total, totalPages }` | 400, 401, 500 |
+| `GET` | `/api/mod/reports/:id` | Bearer (any role) | Report id in the path | `200` full report: all fields including `awaitingReply`, every status update with `visibility` and `moderator { id, email }`, `attachments [{ id, mimeType, sizeBytes, createdAt }]`, `conversation` (with moderator emails) and `internalNotes` | 401, 404, 500 |
 | `PATCH` | `/api/mod/reports/:id/status` | Bearer (any role) | `{ newStatus, note?, visibility? }` | `200` full report | 400, 401, 404, 409 `INVALID_TRANSITION` `CONFLICT`, 423 `REPORT_CLOSED`, 500 |
+| `POST` | `/api/mod/reports/:id/messages` | Bearer (any role) | `{ body }` | `201` full report (clears `awaitingReply`) | 400, 401, 404, 423 `REPORT_CLOSED`, 500 |
+| `POST` | `/api/mod/reports/:id/notes` | Bearer (any role) | `{ body }` (always INTERNAL; no visibility option) | `201` full report | 400, 401, 404, 423 `REPORT_CLOSED`, 500 |
 | `GET` | `/api/mod/reports/:id/attachments/:attachmentId` | Bearer (any role) | Ids in the path | `200 { url, expiresIn: 60, mimeType, sizeBytes }` | 401, 404, 500 |
-| `GET` | `/api/admin/moderators` | Bearer (ADMIN) | None | `200 { items: [{ id, email, role, isActive, createdAt }] }` | 401, 403 `FORBIDDEN`, 500 |
-| `POST` | `/api/admin/moderators` | Bearer (ADMIN) | `{ email, password, role? }` | `201 { id, email, role, isActive, createdAt }` | 400, 401, 403, 409 `EMAIL_TAKEN`, 500 |
-| `PATCH` | `/api/admin/moderators/:id` | Bearer (ADMIN) | `{ role?, isActive? }` (at least one) | `200 { id, email, role, isActive, createdAt }` | 400, 401, 403 `FORBIDDEN` `CANNOT_MODIFY_SELF`, 404, 409 `LAST_ADMIN`, 500 |
+| `GET` | `/api/admin/moderators` | Bearer (ADMIN) | None | `200 { items: [{ id, email, role, isActive, isDemo, createdAt }] }` | 401, 403 `FORBIDDEN`, 500 |
+| `POST` | `/api/admin/moderators` | Bearer (ADMIN) | `{ email, password, role? }` | `201 { id, email, role, isActive, isDemo, createdAt }` | 400, 401, 403 `FORBIDDEN` `DEMO_ACCOUNT_RESTRICTED`, 409 `EMAIL_TAKEN`, 500 |
+| `PATCH` | `/api/admin/moderators/:id` | Bearer (ADMIN) | `{ role?, isActive? }` (at least one) | `200 { id, email, role, isActive, isDemo, createdAt }` | 400, 401, 403 `FORBIDDEN` `CANNOT_MODIFY_SELF` `DEMO_ACCOUNT_PROTECTED` `DEMO_ACCOUNT_RESTRICTED`, 404, 409 `LAST_ADMIN`, 500 |
 | `GET` | `/api/openapi` | None | None | `200` OpenAPI 3.1 document | None |
 | `GET` | `/api-docs` | None | None | Swagger UI (HTML) | None |
-| `GET` | `/api/cron/cleanup` | Bearer `CRON_SECRET` | None | `200 { deletedStagingObjects, deletedConsumedUploadTokens }` | 401, 500 |
+| `GET` | `/api/cron/cleanup` | Bearer `CRON_SECRET` | None | `200 { deletedStagingObjects, deletedConsumedUploadTokens, demoAccountsReset }` | 401, 500 |
 
 ### Field rules
 
@@ -401,7 +446,9 @@ All request and response bodies are JSON, and every API response has `Cache-Cont
 | `sizeBytes` | Integer from 1 to 10,485,760; must equal the uploaded file's real size |
 | `newStatus` | Must be an allowed transition from the current status |
 | `note` | Optional, at most 2,000 characters after trimming |
-| `visibility` | `PUBLIC` (default, shown to the reporter) or `INTERNAL` (moderators only); applies to the whole update |
+| `visibility` | `PUBLIC` (default) or `INTERNAL`; applies to the note. The status change is always shown to the reporter; only a `PUBLIC` note is shown with it |
+| `body` (messages, notes) | 1 to 2,000 characters after trimming; line breaks are kept |
+| `caseCode` (body) | A string of at most 64 characters; anything that isn't a valid code gets the same `404` as an unknown one |
 | `email` | Trimmed and lowercased; unique across moderators |
 | `password` (new moderator) | At least 12 characters and at most 72 bytes (bcrypt's limit) |
 | `role` | `ADMIN` or `MODERATOR` (default `MODERATOR`) |
@@ -410,6 +457,7 @@ All request and response bodies are JSON, and every API response has `Cache-Cont
 | `from`, `to` | Inclusive `createdAt` range: `YYYY-MM-DD` (whole UTC day) or an ISO datetime with offset |
 | `sort`, `order` | `createdAt` (default), `updatedAt` or `status` (workflow order); `asc` or `desc` (default) |
 | `page`, `pageSize` | Page from 1 (default 1); page size 1 to 100 (default 20) |
+| `awaitingReply` (query) | `true` (only cases whose latest message is the reporter's) or `false` |
 
 Every body and query schema is strict: unknown fields are rejected with `400`.
 
@@ -427,11 +475,11 @@ Every error has the same shape:
 | --- | --- | --- |
 | 400 | `BAD_REQUEST`, `VALIDATION_ERROR`, `INVALID_UPLOAD_TOKEN`, `INVALID_UPLOAD` | The body isn't valid JSON, a field or query parameter fails validation (the message names the first bad field), an upload token is malformed, tampered with or expired, or an uploaded file is missing, the wrong size, over 10 MB, not the declared type, or can't be decoded. |
 | 401 | `UNAUTHORIZED`, `INVALID_CREDENTIALS` | The token is missing, invalid or expired, or the account has been deactivated; or login failed (the same answer for every reason). |
-| 403 | `FORBIDDEN`, `CANNOT_MODIFY_SELF` | Signed in, but the route needs the ADMIN role; or an admin tried to demote or deactivate their own account. |
+| 403 | `FORBIDDEN`, `CANNOT_MODIFY_SELF`, `DEMO_ACCOUNT_PROTECTED`, `DEMO_ACCOUNT_RESTRICTED` | Signed in, but the route needs the ADMIN role; an admin tried to demote or deactivate their own account; someone tried to change a demo account's role or status; or a demo account tried to change another account's role or status, or to create an ADMIN. |
 | 404 | `NOT_FOUND` | Unknown case code, report, attachment or moderator. Malformed ids and codes get the identical response. Evidence of a closed report also returns 404, because its attachment rows are deleted. |
 | 409 | `INVALID_TRANSITION`, `CONFLICT`, `UPLOAD_TOKEN_USED`, `EMAIL_TAKEN`, `LAST_ADMIN` | The status change isn't allowed from the current status; another moderator changed the status first; an upload token was already used; the email is taken; or the change would leave no active admin. |
 | 410 | Not used | The API never returns 410. Purged evidence answers 404 instead (the report detail page treats either as "purged"). |
-| 423 | `REPORT_CLOSED` | The report is CLOSED and permanently read-only. |
+| 423 | `REPORT_CLOSED` | The report is CLOSED and permanently read-only. Messages to a closed case get the message "This case is closed. The conversation is read-only." |
 | 429 | `RATE_LIMITED` | Too many requests from this client. `Retry-After` gives the wait in seconds. |
 | 500 | `INTERNAL_ERROR` | Unexpected failure. Always the generic message "Something went wrong"; details are logged on the server only. |
 | 503 | `RATE_LIMITER_UNAVAILABLE` | A rate-limited route was called on a production server with no Upstash credentials configured. |
@@ -448,13 +496,13 @@ curl -s -X POST "$BASE/api/reports" -H 'content-type: application/json' \
 ```
 
 ```json
-{ "caseCode": "WD-4N59-5J30" }
+{ "caseCode": "WD-WR0A-5I3J" }
 ```
 
-**2. Track it as the reporter.**
+**2. Track it as the reporter.** The code goes in the body, not the URL:
 
 ```bash
-curl -s "$BASE/api/reports/WD-4N59-5J30"
+curl -s -X POST "$BASE/api/reports/lookup" -H 'content-type: application/json' -d '{"caseCode":"WD-WR0A-5I3J"}'
 ```
 
 ```json
@@ -463,8 +511,9 @@ curl -s "$BASE/api/reports/WD-4N59-5J30"
   "description": "The lab equipment budget was billed twice for the same order in March.",
   "evidenceUrl": "https://example.org/invoice-scan",
   "status": "SUBMITTED",
-  "createdAt": "2026-09-24T03:01:56.232Z",
-  "statusUpdates": []
+  "createdAt": "2026-09-24T07:32:58.555Z",
+  "statusUpdates": [],
+  "conversation": []
 }
 ```
 
@@ -482,12 +531,12 @@ TOKEN=$(curl -s -X POST "$BASE/api/mod/login" -H 'content-type: application/json
 Find the report's internal id (search accepts the case code):
 
 ```bash
-curl -s "$BASE/api/mod/reports?q=WD-4N59-5J30" -H "authorization: Bearer $TOKEN"
+curl -s "$BASE/api/mod/reports?q=WD-WR0A-5I3J" -H "authorization: Bearer $TOKEN"
 ```
 
 ```json
 {
-  "items": [{ "id": "cu4qtfixyn23vhc64jc3a40kq", "caseCode": "WD-4N59-5J30", "category": "CORRUPTION", "status": "SUBMITTED", "createdAt": "2026-09-24T03:01:56.232Z", "updatedAt": "2026-09-24T03:01:56.232Z", "closedAt": null }],
+  "items": [{ "id": "c1p6brt03xj8120atqpz7saf6", "caseCode": "WD-WR0A-5I3J", "category": "CORRUPTION", "status": "SUBMITTED", "createdAt": "2026-09-24T07:32:58.555Z", "updatedAt": "2026-09-24T07:32:58.555Z", "closedAt": null, "awaitingReply": false }],
   "page": 1, "pageSize": 20, "total": 1, "totalPages": 1
 }
 ```
@@ -495,80 +544,114 @@ curl -s "$BASE/api/mod/reports?q=WD-4N59-5J30" -H "authorization: Bearer $TOKEN"
 **4. Start the review with a public note.**
 
 ```bash
-curl -s -X PATCH "$BASE/api/mod/reports/cu4qtfixyn23vhc64jc3a40kq/status" \
+curl -s -X PATCH "$BASE/api/mod/reports/c1p6brt03xj8120atqpz7saf6/status" \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"newStatus":"UNDER_REVIEW","note":"Thank you. We are looking into this."}'
 ```
 
 ```json
 {
-  "id": "cu4qtfixyn23vhc64jc3a40kq",
-  "caseCode": "WD-4N59-5J30",
+  "id": "c1p6brt03xj8120atqpz7saf6",
   "status": "UNDER_REVIEW",
-  "closedAt": null,
+  "awaitingReply": false,
   "statusUpdates": [
     {
-      "id": "cmuey4ck50007x20rucbtuuyc",
+      "id": "cmuf7sx0b0001x2f48xpdsm3j",
       "note": "Thank you. We are looking into this.",
       "visibility": "PUBLIC",
       "newStatus": "UNDER_REVIEW",
-      "createdAt": "2026-09-24T03:01:56.502Z",
-      "moderatorId": "cmuey1gag0000x2grsrtywr2p",
-      "moderator": { "id": "cmuey1gag0000x2grsrtywr2p", "email": "admin@example.org" }
+      "createdAt": "2026-09-24T07:32:59.292Z",
+      "moderatorId": "cmuf7sw8c0000x2g338enqg23",
+      "moderator": { "id": "cmuf7sw8c0000x2g338enqg23", "email": "admin@example.org" }
     }
   ],
+  "conversation": [
+    { "type": "status", "id": "cmuf7sx0b0001x2f48xpdsm3j", "status": "UNDER_REVIEW", "note": "Thank you. We are looking into this.", "visibility": "PUBLIC", "createdAt": "2026-09-24T07:32:59.292Z", "moderator": { "id": "cmuf7sw8c0000x2g338enqg23", "email": "admin@example.org" } }
+  ],
+  "internalNotes": [],
   "attachments": [],
-  "…": "category, description, evidenceUrl, createdAt, updatedAt omitted"
+  "…": "caseCode, category, description, evidenceUrl, createdAt, updatedAt, closedAt omitted"
 }
 ```
 
-**5. Add an internal note.** Notes are always part of a status change: there is no separate "add note" endpoint, and a request that keeps the same status is rejected:
+**5. Ask the reporter a question.**
 
 ```bash
-curl -s -X PATCH "$BASE/api/mod/reports/cu4qtfixyn23vhc64jc3a40kq/status" \
+curl -s -X POST "$BASE/api/mod/reports/c1p6brt03xj8120atqpz7saf6/messages" \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"newStatus":"UNDER_REVIEW","note":"Forwarded to finance.","visibility":"INTERNAL"}'
+  -d '{"body":"Do you know roughly when the second invoice was paid? Please do not include names."}'
+```
+
+`201` with the full report; the new conversation entry is `{ "type": "message", "author": "REVIEW_TEAM", "body": "Do you know…", "moderator": { "id": "cmuf7sw8c0000x2g338enqg23", "email": "admin@example.org" }, … }`.
+
+**6. The reporter answers.** Only the case code and the text are sent, and the reply shows the moderator only as `REVIEW_TEAM`:
+
+```bash
+curl -s -X POST "$BASE/api/reports/messages" -H 'content-type: application/json' \
+  -d '{"caseCode":"WD-WR0A-5I3J","body":"Early April, a few weeks after the first one."}'
 ```
 
 ```json
-{ "error": { "code": "INVALID_TRANSITION", "message": "Cannot change status from UNDER_REVIEW to UNDER_REVIEW" } }
+{
+  "conversation": [
+    { "type": "status", "status": "UNDER_REVIEW", "note": "Thank you. We are looking into this.", "createdAt": "2026-09-24T07:32:59.292Z" },
+    { "type": "message", "author": "REVIEW_TEAM", "body": "Do you know roughly when the second invoice was paid? Please do not include names.", "createdAt": "2026-09-24T07:32:59.700Z" },
+    { "type": "message", "author": "REPORTER", "body": "Early April, a few weeks after the first one.", "createdAt": "2026-09-24T07:32:59.822Z" }
+  ]
+}
 ```
 
-**6. Resolve, with the internal note attached.** `visibility` applies to the whole update, so the reporter will see the new status but not this entry:
+The case now has `awaitingReply: true`, so it appears in `GET /api/mod/reports?awaitingReply=true`.
+
+**7. Add an internal note.** Internal notes have their own endpoint, with no visibility option:
 
 ```bash
-curl -s -X PATCH "$BASE/api/mod/reports/cu4qtfixyn23vhc64jc3a40kq/status" \
+curl -s -X POST "$BASE/api/mod/reports/c1p6brt03xj8120atqpz7saf6/notes" \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"body":"Forwarded to finance."}'
+```
+
+```json
+{
+  "internalNotes": [
+    { "type": "note", "id": "cmuf7sxrc0007x2f4k5v6xwpq", "note": "Forwarded to finance.", "createdAt": "2026-09-24T07:33:00.265Z", "moderator": { "id": "cmuf7sw8c0000x2g338enqg23", "email": "admin@example.org" } }
+  ],
+  "…": "the rest of the report"
+}
+```
+
+Sending `"visibility": "PUBLIC"` to this endpoint is rejected: `{ "error": { "code": "VALIDATION_ERROR", "message": "Unrecognized key: \"visibility\"" } }`.
+
+**8. Resolve, with an INTERNAL note.** The reporter sees the status change, but not the note:
+
+```bash
+curl -s -X PATCH "$BASE/api/mod/reports/c1p6brt03xj8120atqpz7saf6/status" \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"newStatus":"RESOLVED","note":"Finance confirmed the duplicate payment and recovered it.","visibility":"INTERNAL"}'
 ```
 
+The moderators' `internalNotes` gain `{ "type": "status", "status": "RESOLVED", "note": "Finance confirmed the duplicate payment and recovered it.", … }`. The reporter's view at this point:
+
 ```json
 {
   "status": "RESOLVED",
   "statusUpdates": [
-    { "note": "Thank you. We are looking into this.", "visibility": "PUBLIC", "newStatus": "UNDER_REVIEW", "…": "…" },
-    { "note": "Finance confirmed the duplicate payment and recovered it.", "visibility": "INTERNAL", "newStatus": "RESOLVED", "…": "…" }
+    { "note": "Thank you. We are looking into this.", "newStatus": "UNDER_REVIEW", "createdAt": "2026-09-24T07:32:59.292Z" }
   ],
-  "…": "…"
-}
-```
-
-The reporter's view at this point:
-
-```json
-{
-  "status": "RESOLVED",
-  "statusUpdates": [
-    { "note": "Thank you. We are looking into this.", "newStatus": "UNDER_REVIEW", "createdAt": "2026-09-24T03:01:56.502Z" }
+  "conversation": [
+    { "type": "status", "status": "UNDER_REVIEW", "note": "Thank you. We are looking into this.", "createdAt": "2026-09-24T07:32:59.292Z" },
+    { "type": "message", "author": "REVIEW_TEAM", "body": "Do you know roughly when the second invoice was paid? Please do not include names.", "createdAt": "2026-09-24T07:32:59.700Z" },
+    { "type": "message", "author": "REPORTER", "body": "Early April, a few weeks after the first one.", "createdAt": "2026-09-24T07:32:59.822Z" },
+    { "type": "status", "status": "RESOLVED", "createdAt": "2026-09-24T07:33:00.292Z" }
   ],
   "…": "category, description, evidenceUrl, createdAt omitted"
 }
 ```
 
-**7. Close the case.**
+**9. Close the case.**
 
 ```bash
-curl -s -X PATCH "$BASE/api/mod/reports/cu4qtfixyn23vhc64jc3a40kq/status" \
+curl -s -X PATCH "$BASE/api/mod/reports/c1p6brt03xj8120atqpz7saf6/status" \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"newStatus":"CLOSED","note":"This case is resolved and now closed. Thank you for reporting."}'
 ```
@@ -576,28 +659,32 @@ curl -s -X PATCH "$BASE/api/mod/reports/cu4qtfixyn23vhc64jc3a40kq/status" \
 ```json
 {
   "status": "CLOSED",
-  "closedAt": "2026-09-24T03:01:56.554Z",
+  "closedAt": "2026-09-24T07:33:00.365Z",
+  "awaitingReply": false,
   "attachments": [],
   "…": "…"
 }
 ```
 
-Any further change is refused:
+Any further status change is refused with `{ "error": { "code": "REPORT_CLOSED", "message": "This report is closed and can no longer be changed" } }`, and a message from either side with:
 
 ```json
-{ "error": { "code": "REPORT_CLOSED", "message": "This report is closed and can no longer be changed" } }
+{ "error": { "code": "REPORT_CLOSED", "message": "This case is closed. The conversation is read-only." } }
 ```
 
-The reporter's final view:
+The reporter can still read everything:
 
 ```json
 {
   "status": "CLOSED",
-  "statusUpdates": [
-    { "note": "Thank you. We are looking into this.", "newStatus": "UNDER_REVIEW", "createdAt": "2026-09-24T03:01:56.502Z" },
-    { "note": "This case is resolved and now closed. Thank you for reporting.", "newStatus": "CLOSED", "createdAt": "2026-09-24T03:01:56.555Z" }
+  "conversation": [
+    { "type": "status", "status": "UNDER_REVIEW", "note": "Thank you. We are looking into this.", "createdAt": "2026-09-24T07:32:59.292Z" },
+    { "type": "message", "author": "REVIEW_TEAM", "body": "Do you know roughly when the second invoice was paid? Please do not include names.", "createdAt": "2026-09-24T07:32:59.700Z" },
+    { "type": "message", "author": "REPORTER", "body": "Early April, a few weeks after the first one.", "createdAt": "2026-09-24T07:32:59.822Z" },
+    { "type": "status", "status": "RESOLVED", "createdAt": "2026-09-24T07:33:00.292Z" },
+    { "type": "status", "status": "CLOSED", "note": "This case is resolved and now closed. Thank you for reporting.", "createdAt": "2026-09-24T07:33:00.367Z" }
   ],
-  "…": "category, description, evidenceUrl, createdAt omitted"
+  "…": "category, description, evidenceUrl, createdAt, statusUpdates omitted"
 }
 ```
 
@@ -647,8 +734,8 @@ cp .env.example .env.local
 | `CRON_SECRET` | Bearer secret for `/api/cron/cleanup`. At least 32 characters. |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL (`KV_REST_API_URL` from the Vercel integration also works). |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token (`KV_REST_API_TOKEN` also works). |
-| `SEED_MODERATOR_EMAIL` | Email of the first ADMIN account, created by the seed script. |
-| `SEED_MODERATOR_PASSWORD` | Password for that account. |
+| `SEED_MODERATOR_EMAIL` | Email of your own first ADMIN account, created by `npm run db:seed`. Keep it out of the repository. |
+| `SEED_MODERATOR_PASSWORD` | Password for that account. Never reuse it anywhere else, and never use a demo password. |
 | `TEST_DATABASE_URL` | Optional. Overrides the integration tests' local Docker database. |
 
 The `db:*`, `storage:setup` and `env:check` scripts load `.env.local` explicitly with `dotenv-cli`. Run `npm run env:check` to validate every server variable at once.
@@ -659,6 +746,7 @@ The `db:*`, `storage:setup` and `env:check` scripts load `.env.local` explicitly
 npm run db:deploy       # apply prisma/migrations (prisma migrate deploy)
 npm run storage:setup   # create or update the private "evidence" bucket (10 MB limit, allowed types only)
 npm run db:seed         # create or restore the ADMIN from SEED_MODERATOR_* (safe to re-run)
+npm run seed:demo       # optional: public demo accounts and sample cases (safe to re-run)
 ```
 
 To change the schema, edit `prisma/schema.prisma` and create a new migration with `npm run db:migrate -- --name <change>`.
@@ -691,7 +779,7 @@ npm run test:db:down      # stop and discard the test database
 ### What they cover
 
 - **Unit tests** (`tests/*.test.ts`, with Prisma, Storage and Upstash replaced by fakes): report submission and lookup, including that request headers never reach the database; moderator login and the auth guard on every moderator route; the transition rules and the status route; rate limiting and IP hashing; environment validation; and that the client-side validation matches the server schemas.
-- **Integration tests** (`tests/integration/`, with real Prisma, migrations, transactions and row locks; Storage replaced by an in-memory fake; image sanitizing uses the real sharp): submission and lookup, login, status transitions, closing and read-only enforcement, evidence purge on close, PUBLIC vs INTERNAL notes and the audit trail, search, filters, sorting and pagination, role enforcement and admin self-protection including the last-admin rule, uploads (type, size and magic-byte checks, EXIF removal for JPEG, PNG and WebP, token reuse and rollback), attachment downloads, and the cleanup cron.
+- **Integration tests** (`tests/integration/`, with real Prisma, migrations, transactions and row locks; Storage replaced by an in-memory fake; image sanitizing uses the real sharp): submission and lookup (GET and POST), the conversation (reporter and moderator messages, no moderator identity or INTERNAL notes in the public view, `awaitingReply` toggling and filtering, 423 after close for both sides, a message racing a close, the reporter message rate limit, identical 404s), internal notes, the demo-account protections, the demo seed's idempotency, and the cron's demo-account reset, as well as login, status transitions, closing and read-only enforcement, evidence purge on close, PUBLIC vs INTERNAL notes and the audit trail, search, filters, sorting and pagination, role enforcement and admin self-protection including the last-admin rule, uploads (type, size and magic-byte checks, EXIF removal for JPEG, PNG and WebP, token reuse and rollback), attachment downloads, and the cleanup cron.
 - **End-to-end tests** (`tests/e2e/`, against `next start`): the page CSP nonce matches every script Next.js renders, and API routes and `/api-docs` keep their fixed policies.
 
 ### Screenshots
@@ -701,7 +789,7 @@ npx playwright install chromium   # once
 npm run screenshots
 ```
 
-This builds the app, starts it on port 3123, creates data **through the real API only** (it submits reports and signs in with `SEED_ADMIN_*`, or the `SEED_MODERATOR_*` account from `.env.local`), and saves desktop and mobile screenshots to `docs/screenshots/`. `npm run screenshots -- --only=dashboard,reports` retakes selected pages. The case code screen is a real submission, so it counts toward the 10-per-hour report limit.
+This builds the app, starts it on port 3123, creates data **through the real API only** (it submits reports and signs in with the `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` or `SEED_MODERATOR_*` account from `.env.local`), and saves desktop and mobile screenshots to `docs/screenshots/`. `npm run screenshots -- --only=dashboard,reports` retakes selected pages. The case code screen is a real submission, so it counts toward the 10-per-hour report limit.
 
 ## Deployment (Vercel)
 
@@ -712,11 +800,33 @@ This builds the app, starts it on port 3123, creates data **through the real API
    npm run db:deploy
    npm run storage:setup   # once per Supabase project
    npm run db:seed
+   npm run seed:demo       # public demo accounts and sample cases, if you want them
    ```
 4. **Environment variables.** Set `DATABASE_URL`, `JWT_SECRET`, `IP_HASH_SECRET`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and `CRON_SECRET` for the **Production** environment only, with values different from local development. `DIRECT_URL` and the `SEED_*` variables aren't needed on Vercel, because migrations and seeding run locally. `SUPABASE_URL` is read at build time (the API CSP) and at runtime (the page CSP). Run `npm run env:check` against the production values before the first deploy.
 5. **Function region.** Set the function region to **`syd1`** (Sydney) in the project's settings, so functions sit next to Supabase in `ap-southeast-2`. Every query is a network round trip, and a status change makes several in one transaction.
-6. **Cron.** `vercel.json` declares the daily cleanup (`0 3 * * *`, `GET /api/cron/cleanup`). Vercel registers it on deploy and sends `Authorization: Bearer $CRON_SECRET` automatically once `CRON_SECRET` is set.
+6. **Cron.** `vercel.json` declares the daily cleanup (`0 3 * * *`, `GET /api/cron/cleanup`), which also resets the demo accounts. Vercel registers it on deploy and sends `Authorization: Bearer $CRON_SECRET` automatically once `CRON_SECRET` is set.
 7. **Analytics off.** Vercel Web Analytics and Speed Insights stay disabled for the project. Neither package is installed, and the CSP would block their scripts anyway.
+
+## Demo accounts
+
+So reviewers can try the moderator and admin features on the live site, `npm run seed:demo` (`prisma/seed-demo.ts`) creates three accounts whose credentials are **public by design** and listed in [`DUMMY_SIGN_INS.txt`](DUMMY_SIGN_INS.txt), which the sign-in page links to:
+
+| Account | Role |
+| --- | --- |
+| `admin@whistledrop.demo` | ADMIN |
+| `aria@whistledrop.demo` | MODERATOR |
+| `kiran@whistledrop.demo` | MODERATOR |
+
+It also creates five fictional sample cases with fixed codes, `WD-DEMO-0001` to `WD-DEMO-0005`, one per status, including an ongoing conversation (`0001`, awaiting reply) and a closed case whose conversation stays readable (`0003`). They are built through the same service functions the API uses (`lib/cases.ts`), not raw SQL. The script is idempotent: it restores the accounts' passwords, roles and active status, and leaves existing sample cases alone.
+
+Because anyone can sign in as these accounts, the server protects them (`Moderator.isDemo`):
+
+- A demo account's role and active status can't be changed through the API, by anyone (`403 DEMO_ACCOUNT_PROTECTED`).
+- A demo account can't change any other account's role or active status (`403 DEMO_ACCOUNT_RESTRICTED`): not demote or deactivate a real account, and not promote or reactivate one either, since that would hand ADMIN, or a retired account, to whoever holds the public credentials.
+- A demo admin can create only `MODERATOR` accounts, so it can't mint a non-demo ADMIN.
+- The daily cron (`/api/cron/cleanup`) makes every demo account active again with its original role.
+
+To retire a real account (moderators with history can't be deleted), deactivate it: `npm run account:deactivate -- <email>` (`scripts/deactivate-account.ts`). It refuses demo accounts and the last active ADMIN.
 
 ## Design decisions and assumptions
 
@@ -734,8 +844,9 @@ This builds the app, starts it on port 3123, creates data **through the real API
 - **PDF metadata is not stripped.** PDFs are only checked for type and size. Author, producer, creation tool, timestamps, and any embedded or hidden content stay as uploaded. Reporters should remove PDF metadata themselves, for example by printing to a new PDF, before uploading.
 - **A lost case code can't be recovered.** Nothing links a report to its reporter, so there's no reset or recovery.
 - **The reporter's network provider can still see the site visit.** ISPs, workplace or campus networks and the hosting platform can see that a device connected to WhistleDrop. At-risk reporters should use Tor or a trusted VPN from a device and network that aren't monitored.
-- **Case codes appear in hosting request logs.** The lookup is a GET with the code in the path (see [The case-code model](#the-case-code-model)).
-- **Notes need a status change.** There is no separate endpoint for adding a note, so a moderator can't add a second note without moving the case forward.
+- **The legacy GET lookup puts case codes in request logs.** The Track page uses the POST routes, but `GET /api/reports/{caseCode}` still exists for compatibility, and anyone calling it puts the code in a logged path.
+- **Messages are free text.** A reporter can still identify themselves in what they write; the UI warns them, but nothing can stop it. Messages can't be edited or deleted.
+- **Demo accounts can read every report.** On a deployment with the demo accounts seeded, anyone can sign in as a moderator, so only fictional data should live there. Demo accounts are limited only in account management, not in case access.
 - **Content can identify its author.** A description, writing style or the evidence itself can give a reporter away, and `createdAt` is stored to the millisecond, so someone who could see both platform logs and the database could try to match them.
 - **Rate-limit windows reset at 00:00 UTC**, because the IP hash's salt rotates daily. Everyone behind one shared IP (a campus network or a Tor exit) also shares one budget.
 - **The rate limiter trusts `X-Forwarded-For`.** That's correct behind Vercel. Exposed directly, clients could forge the header.
@@ -747,9 +858,9 @@ This builds the app, starts it on port 3123, creates data **through the real API
 
 ## Future improvements
 
-- Move the case-code lookup to `POST` so codes never appear in request paths or logs.
+- Retire `GET /api/reports/{caseCode}` once no client uses it.
 - Strip PDF metadata, or flatten PDFs to images.
-- Allow notes without a status change.
+- Scope demo accounts to the sample cases, so a demo deployment could also hold real reports.
 - Add a description preview to the reports list.
 - Revocable moderator sessions and optional two-factor authentication.
 - Full-text or trigram search for larger datasets.

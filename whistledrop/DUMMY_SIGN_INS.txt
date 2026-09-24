@@ -1,0 +1,69 @@
+WhistleDrop: demo sign-ins
+==========================
+
+Demo accounts for reviewers to test the moderator and admin features.
+
+Login URL: <LIVE_URL>/mod/login
+
+These credentials are public on purpose. They are used for nothing else.
+
+
+Accounts
+--------
+
+1. Admin
+   Email:    admin@whistledrop.demo
+   Password: Demo-Admin-Lantern-2026
+   Can:      everything a moderator can, plus open the Moderators page to
+             list accounts and create new MODERATOR accounts. As a demo
+             account it can't change any account's role or active status,
+             and can't create ADMIN accounts.
+
+2. Moderator
+   Email:    aria@whistledrop.demo
+   Password: Demo-Aria-Harbour-2026
+   Can:      see the dashboard and every report; search and filter; open a
+             report; reply to the reporter; add internal notes; move a case
+             through SUBMITTED -> UNDER_REVIEW -> RESOLVED / DISMISSED ->
+             CLOSED; download evidence. No access to account management.
+
+3. Moderator
+   Email:    kiran@whistledrop.demo
+   Password: Demo-Kiran-Meadow-2026
+   Can:      the same as aria. Use both to see which moderator wrote what:
+             staff see the author of every entry, the reporter only ever
+             sees "Review team".
+
+
+Sample cases (for /track and the conversation)
+----------------------------------------------
+
+Enter a code at <LIVE_URL>/track. Anyone with a code can read that case
+and reply in its conversation, exactly as a reporter would.
+
+  WD-DEMO-0001  Security    Under review  Unpatched internal server. Ongoing
+                                          conversation; the reporter wrote
+                                          last, so it shows as "Awaiting
+                                          reply" for moderators.
+  WD-DEMO-0002  Corruption  Resolved      Procurement orders split to avoid
+                                          a second approval.
+  WD-DEMO-0003  Harassment  Closed        Closed case. The whole conversation
+                                          stays readable; replying is refused.
+  WD-DEMO-0004  Technical   Submitted     Silent backup failures. No activity
+                                          yet.
+  WD-DEMO-0005  Other       Dismissed     Blocked fire-exit corridor.
+
+All sample content is fictional: no real people or organisations.
+
+
+Protection
+----------
+
+The demo accounts are protected on the server: their role and active status
+can't be changed through the API by anyone, and they can't change other
+accounts' role or status. They are reset daily: the scheduled cleanup job
+makes every demo account active again with its original role.
+
+Sample cases are created once by `npm run seed:demo` and are not reset, so
+you may see messages other reviewers have added. Please don't enter real
+personal information anywhere on the demo site.

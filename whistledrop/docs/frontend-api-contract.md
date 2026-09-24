@@ -16,8 +16,8 @@ the schemas in `lib/openapi.ts`, all via `import type` + `z.infer` / `z.input`.
 | Error body | `{ "error": { "code": string, "message": string } }`. **There is no `details` field**; validation errors put the first Zod issue into `message` as `"<path>: <issue>"`. |
 | Caching | Every API response has `Cache-Control: no-store`. |
 | Auth | `/api/mod/*` (except `/api/mod/login`) and `/api/admin/*`: `Authorization: Bearer <jwt>`. The server re-reads the moderator from the database on every request, so deactivation and role changes apply at once. |
-| Rate limits | Per client IP (HMAC'd daily, never stored raw), sliding window. Exceeded → `429 RATE_LIMITED` with `Retry-After: <seconds>`. |
-| Rate limiter missing | Production without Upstash → `503 RATE_LIMITER_UNAVAILABLE` on the four rate-limited endpoints. |
+| Rate limits | Per client IP (HMAC'd daily, never stored raw), sliding window; the reporter message limit is per IP **and** case code. Exceeded → `429 RATE_LIMITED` with `Retry-After: <seconds>`. |
+| Rate limiter missing | Production without Upstash → `503 RATE_LIMITER_UNAVAILABLE` on the six rate-limited endpoints (every public endpoint plus login). |
 | Unexpected failure | `500 INTERNAL_ERROR`, message `"Something went wrong"`. No details ever. |
 | Malformed JSON | `400 BAD_REQUEST`. |
 | Invalid input | `400 VALIDATION_ERROR`. Request schemas are `.strict()`: unknown keys are rejected. |
@@ -31,6 +31,7 @@ Enums (Prisma):
 - `ReportStatus`: `SUBMITTED | UNDER_REVIEW | RESOLVED | DISMISSED | CLOSED`
 - `NoteVisibility`: `PUBLIC | INTERNAL`
 - `ModeratorRole`: `ADMIN | MODERATOR`
+- `MessageAuthorType` (storage only): `REPORTER | MODERATOR`. The API never sends it: the reporter sees `author: "REPORTER" | "REVIEW_TEAM"`.
 
 ## Public endpoints (no auth)
 
@@ -56,25 +57,57 @@ Rate limit: 10 per hour.
 
 All or nothing: if any attachment fails, no report is created.
 
-### `GET /api/reports/{caseCode}`: look up a report
+### `POST /api/reports/lookup`: look up a report (use this one)
 
-Rate limit: 30 per 15 minutes, counted before validation.
-The server trims and upper-cases the code.
+Rate limit: 30 per 15 minutes, counted before validation, shared with the GET form below.
+The server trims and upper-cases the code. The code is in the **body**, so it never appears in a URL
+or in the hosting platform's request logs.
 
 | | Shape |
 | --- | --- |
-| 200 | `{ category, description, evidenceUrl: string \| null, status, createdAt, statusUpdates: { note: string \| null, newStatus, createdAt }[] }` (PUBLIC updates only, oldest first; no ids, no visibility, no moderator) |
+| Request | `{ caseCode: string (≤ 64) }` |
+| 200 | `PublicReport` (below) |
+
+`PublicReport` = `{ category, description, evidenceUrl: string | null, status, createdAt, statusUpdates, conversation }`
+
+- `statusUpdates: { note: string | null, newStatus, createdAt }[]`: PUBLIC updates only, oldest first. Kept for compatibility.
+- `conversation`: oldest first, one list merging
+  - messages: `{ type: "message", author: "REPORTER" | "REVIEW_TEAM", body, createdAt }`
+  - every status change: `{ type: "status", status, note?, createdAt }`; `note` only when that change had a PUBLIC note.
+
+  Never any ids, moderator ids or emails, visibility flags or INTERNAL notes. Returned for CLOSED cases too.
 
 | Status | Code | When |
 | --- | --- | --- |
-| 404 | `NOT_FOUND` | Unknown **or** malformed code (identical responses) |
+| 400 | `BAD_REQUEST` / `VALIDATION_ERROR` | Body isn't JSON, `caseCode` isn't a string, or extra keys |
+| 404 | `NOT_FOUND` | Unknown **or** malformed code (identical responses, `"Report not found"`) |
 | 429 | `RATE_LIMITED` | + `Retry-After` |
 | 503 / 500 | | as above |
 
-> The case code travels in this request's **path**. That is how the backend is
-> built and it can't change in this frontend work. The browser address bar,
-> history and storage never hold it (fetch only, never navigation), but the
-> hosting platform's request logs will see the path. See "Open issues".
+### `GET /api/reports/{caseCode}`: the same lookup (compatibility only)
+
+Identical response and rate limit bucket, but the code is in the path, where hosting request logs
+can record it. The UI doesn't use it.
+
+### `POST /api/reports/messages`: the reporter replies
+
+Rate limits: 10 per hour per client **and case code** (`reporterMessage`), and each request also counts
+against the 30-per-15-minutes lookup budget (a wrong code answers 404, so this is also a lookup).
+
+| | Shape |
+| --- | --- |
+| Request | `{ caseCode: string (≤ 64), body: string (trimmed, 1–2000; line breaks kept) }` |
+| 201 | `{ conversation }` (same shape as in `PublicReport`), including the new message |
+
+Creates a `REPORTER` message and sets the case's `awaitingReply`. Nothing about the sender is stored.
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `BAD_REQUEST` / `VALIDATION_ERROR` | Body isn't JSON, empty or too long `body`, extra keys |
+| 404 | `NOT_FOUND` | Unknown or malformed code: the lookup's exact 404 |
+| 423 | `REPORT_CLOSED` | `"This case is closed. The conversation is read-only."` |
+| 429 | `RATE_LIMITED` | + `Retry-After` (either limit) |
+| 503 / 500 | | as above |
 
 ### `POST /api/uploads/sign`: get a signed upload URL for one file
 
@@ -142,15 +175,23 @@ Query (strict, so unknown params give 400):
 | `order` | `asc \| desc` | `desc` |
 | `page` | int 1–10000 | 1 |
 | `pageSize` | int 1–100 | 20 |
+| `awaitingReply` | `true \| false` | none (both) |
 
-200: `{ items: { id, caseCode, category, status, createdAt, updatedAt, closedAt: string | null }[], page, pageSize, total, totalPages }`
+200: `{ items: { id, caseCode, category, status, createdAt, updatedAt, closedAt: string | null, awaitingReply: boolean }[], page, pageSize, total, totalPages }`
 
 Errors: `400 VALIDATION_ERROR`, `401`, `500`.
 
 ### `GET /api/mod/reports/{id}`: one report with its full history
 
-200 (`ReportDetail`): `{ id, caseCode, category, description, evidenceUrl: string | null, status, createdAt, updatedAt, closedAt: string | null, statusUpdates: { id, note: string | null, visibility, newStatus, createdAt, moderatorId: string | null, moderator: { id, email } | null }[], attachments: { id, mimeType, sizeBytes, createdAt }[] }`
-Updates and attachments are oldest first; storage paths are never returned.
+200 (`ReportDetail`): `{ id, caseCode, category, description, evidenceUrl: string | null, status, createdAt, updatedAt, closedAt: string | null, awaitingReply: boolean, statusUpdates: { id, note: string | null, visibility, newStatus, createdAt, moderatorId: string | null, moderator: { id, email } | null }[], attachments: { id, mimeType, sizeBytes, createdAt }[], conversation, internalNotes }`
+
+- `conversation`: exactly what the reporter sees, plus who wrote it:
+  `{ type: "message", id, author: "REPORTER" | "REVIEW_TEAM", body, createdAt, moderator: { id, email } | null }` and
+  `{ type: "status", id, status, note?, visibility, createdAt, moderator }` (`note` only when PUBLIC, as for the reporter).
+- `internalNotes`: staff only: `{ type: "note" | "status", id, status?, note: string | null, createdAt, moderator }`,
+  i.e. internal notes and INTERNAL status updates (with their notes).
+
+Everything is oldest first; storage paths are never returned.
 
 Errors: `404 NOT_FOUND` (unknown or non-cuid id), `401`, `500`.
 
@@ -158,7 +199,7 @@ Errors: `404 NOT_FOUND` (unknown or non-cuid id), `401`, `500`.
 
 | | Shape |
 | --- | --- |
-| Request | `{ newStatus: ReportStatus, note?: string (trimmed, ≤ 2000), visibility?: "PUBLIC" \| "INTERNAL" }` (visibility defaults to PUBLIC) |
+| Request | `{ newStatus: ReportStatus, note?: string (trimmed, ≤ 2000), visibility?: "PUBLIC" \| "INTERNAL" }` (visibility defaults to PUBLIC and applies to the note: the status change always shows in the reporter's conversation, the note only if PUBLIC) |
 | 200 | Updated `ReportDetail` (same shape as GET) |
 
 | Status | Code | When |
@@ -178,7 +219,28 @@ SUBMITTED → UNDER_REVIEW → RESOLVED  → CLOSED
 ```
 
 Moving to CLOSED **permanently deletes every evidence file** before the status
-changes, and sets `closedAt`. The UI must say so before confirming.
+changes, sets `closedAt` and clears `awaitingReply`. The conversation stays readable by the reporter.
+The UI must say so before confirming.
+
+### `POST /api/mod/reports/{id}/messages`: reply to the reporter
+
+| | Shape |
+| --- | --- |
+| Request | `{ body: string (trimmed, 1–2000) }` |
+| 201 | Updated `ReportDetail` |
+
+The reporter sees it as `REVIEW_TEAM`; the acting moderator is recorded for staff. Clears `awaitingReply`.
+Errors: `400`, `401`, `404 NOT_FOUND`, `423 REPORT_CLOSED` (`"This case is closed. The conversation is read-only."`), `500`.
+
+### `POST /api/mod/reports/{id}/notes`: internal note
+
+| | Shape |
+| --- | --- |
+| Request | `{ body: string (trimmed, 1–2000) }`; there is **no** visibility option (sending one is a 400) |
+| 201 | Updated `ReportDetail` |
+
+Always INTERNAL, never shown to the reporter; doesn't change `awaitingReply`. Anything for the reporter goes
+through `/messages`. Errors: `400`, `401`, `404`, `423 REPORT_CLOSED`, `500`.
 
 ### `GET /api/mod/reports/{id}/attachments/{attachmentId}`: download link
 
@@ -190,7 +252,11 @@ The link expires after 60 s, so request it on click, never ahead of time.
 
 Also: `403 FORBIDDEN` when the caller is authenticated but not ADMIN.
 
-`Moderator` = `{ id, email, role, isActive, createdAt }` (never the password hash).
+`Moderator` = `{ id, email, role, isActive, isDemo, createdAt }` (never the password hash).
+
+Demo accounts (`isDemo: true`, credentials public in `DUMMY_SIGN_INS.txt`) are enforced on the server:
+nobody can change a demo account's role or active status, a demo account can't change any other
+account's role or active status, and a demo account can only create MODERATOR accounts.
 
 ### `GET /api/admin/moderators`
 
@@ -203,7 +269,7 @@ Also: `403 FORBIDDEN` when the caller is authenticated but not ADMIN.
 | Request | `{ email: string (trimmed, lower-cased, email), password: string (≥ 12 chars, ≤ 72 UTF-8 bytes), role?: ModeratorRole (default MODERATOR) }` |
 | 201 | `Moderator` |
 
-Errors: `400 BAD_REQUEST / VALIDATION_ERROR`, `409 EMAIL_TAKEN`, `401`, `403`, `500`.
+Errors: `400 BAD_REQUEST / VALIDATION_ERROR`, `409 EMAIL_TAKEN`, `401`, `403 FORBIDDEN`, `403 DEMO_ACCOUNT_RESTRICTED` (a demo account creating an ADMIN), `500`.
 
 ### `PATCH /api/admin/moderators/{id}`
 
@@ -216,6 +282,8 @@ Errors: `400 BAD_REQUEST / VALIDATION_ERROR`, `409 EMAIL_TAKEN`, `401`, `403`, `
 | --- | --- | --- |
 | 400 | `BAD_REQUEST` / `VALIDATION_ERROR` | |
 | 403 | `CANNOT_MODIFY_SELF` | Demoting or deactivating your own account |
+| 403 | `DEMO_ACCOUNT_PROTECTED` | Changing a demo account's role or active status |
+| 403 | `DEMO_ACCOUNT_RESTRICTED` | A demo account changing another account's role or active status |
 | 403 | `FORBIDDEN` | Not ADMIN (or lost ADMIN while the request waited) |
 | 404 | `NOT_FOUND` | Unknown or non-cuid id |
 | 409 | `LAST_ADMIN` | Would leave no active ADMIN |
@@ -227,7 +295,7 @@ There is **no delete endpoint**: moderators are deactivated, never deleted.
 
 | Endpoint | Why |
 | --- | --- |
-| `GET /api/cron/cleanup` | Vercel Cron only (`Bearer $CRON_SECRET`) |
+| `GET /api/cron/cleanup` | Vercel Cron only (`Bearer $CRON_SECRET`). Also restores demo accounts (active, original roles). |
 | `GET /api/openapi`, `/api-docs` | API documentation |
 
 ## Where this differs from the Part 1 brief
@@ -248,15 +316,25 @@ There is **no delete endpoint**: moderators are deactivated, never deleted.
 - The attachment "View" button treats **404 as well as 410** as "Evidence purged": this API never
   sends 410, and a 404 for an attachment the page just listed means its row was deleted (the case
   was closed in the meantime).
-- The reports page keeps filters in its query string, except the search text (`q`), which can be a
-  case code and so stays in memory only.
+- The reports page keeps filters in its query string (including `awaitingReply=true`), except the search
+  text (`q`), which can be a case code and so stays in memory only.
+
+## Conversation UI notes
+
+- `/track` keeps the case code in component state only and sends it in request bodies
+  (`POST /api/reports/lookup`, `POST /api/reports/messages`). After sending, the thread is replaced with
+  the `conversation` from the 201 response, so no extra lookup is spent.
+- The thread is a `StatusTimeline`: a synthetic "Submitted" entry from `createdAt`, then each
+  conversation entry. `REVIEW_TEAM` → lime eyebrow "Review team", `REPORTER` → muted "You", status events →
+  the status label with the PUBLIC note. A 423 while sending switches to the read-only notice.
+- The report page shows `conversation` and `internalNotes` in separate blocks with separate composers:
+  the reply uses the lime `SubmitButton`, the internal note an outlined `BlockCTA` in a dashed frame.
+- The dashboard's "Awaiting Reply" count is `GET /api/mod/reports?awaitingReply=true&pageSize=1` → `total`.
 
 ## Open issues
 
-1. **Case code in the lookup URL path.** The rule "case codes never appear in URLs" can be kept for the
-   address bar, history, storage and logs on the client. The lookup request itself carries the code in its
-   path because that's how the API is built, so platform access logs may record it. Fixing that needs a
-   backend change, e.g. `POST /api/reports/lookup { caseCode }`, which is out of scope here.
+1. ~~Case code in the lookup URL path.~~ Resolved: the UI uses `POST /api/reports/lookup`. The GET
+   route remains only for API compatibility.
 2. **No description in the report list.** `GET /api/mod/reports` items have no `description`, so the
    reports table can't show a description preview without one extra request per row. Adding a
    truncated `description` (e.g. the first 160 characters) to the list's `select` would fix it.
