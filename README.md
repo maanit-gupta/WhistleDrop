@@ -18,6 +18,12 @@ An anonymous reporting service. Submit a report without an account, get a case c
 
 </div>
 
+## Demo
+
+<a href="<LIVE_URL>/#demo"><img src="whistledrop/docs/demo/demo-preview.gif" alt="WhistleDrop walkthrough: the reporter sees the review team's question and answers anonymously" width="760"></a>
+
+*[Watch the full walkthrough on the live site](<LIVE_URL>/#demo)* (2:18, no sound): Submit · Track · Review · Conversation · Close · Admin. To try it yourself, the demo moderator accounts are in [`DUMMY_SIGN_INS.txt`](whistledrop/DUMMY_SIGN_INS.txt).
+
 ## What it is
 
 WhistleDrop is my submission for the **GDG on Campus SRM** Technical Domain brief, *"WhistleDrop — Speak Without Being Seen"*.

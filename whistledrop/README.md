@@ -13,6 +13,23 @@
 - **Source:** https://github.com/maanit-gupta/WhistleDrop
 - **Try it as a moderator:** public demo accounts and sample case codes are in [`DUMMY_SIGN_INS.txt`](DUMMY_SIGN_INS.txt) (see [Demo accounts](#demo-accounts)).
 
+## Demo
+
+<a href="<LIVE_URL>/#demo"><img src="docs/demo/demo-preview.gif" alt="WhistleDrop walkthrough: the reporter sees the review team's question and answers anonymously" width="800"></a>
+
+*[Watch the full walkthrough on the live site](<LIVE_URL>/#demo)* (2:18, no sound).
+
+The video is a real session on the app, recorded by `npm run record:demo`. Its chapters:
+
+1. **Submit** (0:05): a report is written and sent with an image attached; the case code is copied and saved.
+2. **Track** (0:23): the case code shows the report as Submitted, with an empty conversation.
+3. **Review** (0:29): a moderator signs in, finds the case, starts the review with a public note, adds an internal note and asks the reporter a question.
+4. **Conversation** (1:08): the reporter sees the question from the review team (the internal note isn't there) and answers; the moderator reads it and resolves the case.
+5. **Close** (1:38): the case is closed permanently; evidence is deleted and the reporter can still read the whole conversation, but not reply.
+6. **Admin** (1:57): a demo admin tries to deactivate a demo account and the server refuses; then the API docs.
+
+To try it yourself, the demo moderator and admin accounts are in [`DUMMY_SIGN_INS.txt`](DUMMY_SIGN_INS.txt).
+
 ## Contents
 
 1. [Overview](#overview)
@@ -46,7 +63,7 @@ WhistleDrop is my submission for the GDG on Campus SRM Technical Domain brief, *
 
 ## Screenshots
 
-Captured from the production build by `npm run screenshots` at 1440 px (desktop) and 390 px (mobile). Full-size images are in [`docs/screenshots/`](docs/screenshots/).
+Captured from the production build by `npm run screenshots` at 1440 px (desktop) and 390 px (mobile), using only the demo accounts and the fictional `WD-DEMO` sample cases. Full-size images are in [`docs/screenshots/`](docs/screenshots/).
 
 ### Reporter
 
@@ -200,9 +217,10 @@ whistledrop/
 │   └── client/                          Browser-only: typed API client, session (sessionStorage), case code input
 ├── proxy.ts                             Next.js proxy (formerly middleware): per-request CSP nonce for pages
 ├── prisma/                              schema.prisma, migrations/, seed.ts (first admin), seed-demo.ts (demo accounts + cases)
-├── scripts/                             setup-storage.ts, check-env.ts, deactivate-account.ts, copy-swagger-ui.mjs, screenshots.mjs
+├── scripts/                             setup-storage.ts, check-env.ts, deactivate-account.ts, record-demo.ts, screenshots.mjs, copy-swagger-ui.mjs
 ├── tests/                               Unit, integration/ and e2e/ suites plus helpers/
-├── docs/                                Frontend API contract and screenshots
+├── docs/                                Frontend API contract, screenshots, and demo/ (the README's preview GIF)
+├── public/media/                        demo.mp4 and demo-poster.jpg for the home page's Demo section
 ├── DUMMY_SIGN_INS.txt                   Public demo credentials and sample case codes for reviewers
 ├── compose.test.yml                     Disposable Postgres for the integration tests
 └── vercel.json                          Daily cron schedule
@@ -329,7 +347,7 @@ To stop an upload token being used twice, its `jti` (a random UUID) is recorded 
 
 ### Headers
 
-- **Nonce-based CSP on pages.** `proxy.ts` gives every page request a fresh nonce: `script-src 'self' 'nonce-…' 'strict-dynamic'`, plus `'unsafe-eval'` in development only. Next.js adds the nonce to its own scripts, and anything else, such as an injected `<script>`, is blocked. Fonts and images are same-origin, `connect-src` allows only our origin and the Supabase project (for direct uploads), framing and plugins are blocked, and `<base>` and form targets are limited to our own origin. API routes get a fixed same-origin policy, and `/api-docs` gets that policy plus what Swagger UI needs.
+- **Nonce-based CSP on pages.** `proxy.ts` gives every page request a fresh nonce: `script-src 'self' 'nonce-…' 'strict-dynamic'`, plus `'unsafe-eval'` in development only. Next.js adds the nonce to its own scripts, and anything else, such as an injected `<script>`, is blocked. Fonts, images and media (`media-src 'self'`, for the demo video) are same-origin, `connect-src` allows only our origin and the Supabase project (for direct uploads), framing and plugins are blocked, and `<base>` and form targets are limited to our own origin. API routes get a fixed same-origin policy, and `/api-docs` gets that policy plus what Swagger UI needs.
 - **The `style-src` tradeoff.** Page styles allow `'unsafe-inline'`. React renders `style` attributes (the UI uses them for transforms and progress bars), and nonces can't cover style attributes. Inline styles can't run code, so scripts stay strict.
 - **`Referrer-Policy: no-referrer`** on every response (and in the page metadata), so leaving WhistleDrop never tells the next site where the visitor came from.
 - **`Cache-Control: no-store`** on every API response, so reports aren't kept in browser or proxy caches.
@@ -338,6 +356,7 @@ To stop an upload token being used twice, its `jti` (a random UUID) is recorded 
 ### No third parties
 
 - **No analytics** of any kind: no Vercel Analytics, no Speed Insights, no tag managers, no third-party scripts.
+- **Self-hosted demo video.** The walkthrough on the home page is a local MP4 in a native `<video>` element: no YouTube or Vimeo embed, no third-party player, no autoplay (and no audio track), and only its metadata is fetched until the visitor presses play.
 - **Self-hosted fonts.** `next/font` downloads the fonts at build time and serves them from `/_next/static`, so browsers never contact Google Fonts. The CSP's `font-src 'self'` would block them anyway.
 - **Swagger UI is self-hosted with its validator disabled.** Its assets are copied from `swagger-ui-dist` into `public/api-docs/vendor/` on install. Its default validator badge, which sends the spec URL to `validator.swagger.io`, is turned off (`validatorUrl: null`). The authorization token is kept in memory only.
 - **Scarf telemetry is blocked.** `swagger-ui-dist` depends on `@scarf/scarf`, whose install script reports downloads to Scarf. The `allowScripts` allowlist in `package.json` doesn't include it, so the script never runs.
@@ -783,7 +802,7 @@ npm run test:db:down      # stop and discard the test database
 
 - **Unit tests** (`tests/*.test.ts`, with Prisma, Storage and Upstash replaced by fakes): report submission and lookup, including that request headers never reach the database; moderator login and the auth guard on every moderator route; the transition rules and the status route; rate limiting and IP hashing; environment validation; and that the client-side validation matches the server schemas.
 - **Integration tests** (`tests/integration/`, with real Prisma, migrations, transactions and row locks; Storage replaced by an in-memory fake; image sanitizing uses the real sharp): submission and lookup (GET and POST), the conversation (reporter and moderator messages, no moderator identity or INTERNAL notes in the public view, `awaitingReply` toggling and filtering, 423 after close for both sides, a message racing a close, the reporter message rate limit, identical 404s), internal notes, the demo-account protections, the demo seed's idempotency, and the cron's demo-account reset, as well as login, status transitions, closing and read-only enforcement, evidence purge on close, PUBLIC vs INTERNAL notes and the audit trail, search, filters, sorting and pagination, role enforcement and admin self-protection including the last-admin rule, uploads (type, size and magic-byte checks, EXIF removal for JPEG, PNG and WebP, token reuse and rollback), attachment downloads, and the cleanup cron.
-- **End-to-end tests** (`tests/e2e/`, against `next start`, run twice from one build: `DEMO_MODE=false` and `DEMO_MODE=true`): the page CSP nonce matches every script Next.js renders, and API routes and `/api-docs` keep their fixed policies; the demo banner appears on Home, Report and Track (in warm paper and dark ink) only in demo mode; and in demo mode the report form won't submit until the acknowledgement is ticked. The browser tests need Chromium: `npx playwright install chromium` once.
+- **End-to-end tests** (`tests/e2e/`, against `next start`, run twice from one build: `DEMO_MODE=false` and `DEMO_MODE=true`): the page CSP nonce matches every script Next.js renders (and pages allow `media-src 'self'` only), and API routes and `/api-docs` keep their fixed policies; the home page's Demo section uses a local, non-autoplaying native video whose chapter buttons seek to their timestamps, and the nav's Demo link reaches it from any page; the demo banner appears on Home, Report and Track (in warm paper and dark ink) only in demo mode; and in demo mode the report form won't submit until the acknowledgement is ticked. The browser tests need Chromium: `npx playwright install chromium` once.
 
 ### Screenshots
 
@@ -792,7 +811,25 @@ npx playwright install chromium   # once
 npm run screenshots
 ```
 
-This builds the app, starts it on port 3123, creates data **through the real API only** (it submits reports and signs in with the `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` or `SEED_MODERATOR_*` account from `.env.local`), and saves desktop and mobile screenshots to `docs/screenshots/`. `npm run screenshots -- --only=dashboard,reports` retakes selected pages. The case code screen is a real submission, so it counts toward the 10-per-hour report limit.
+This builds the app, seeds or restores the demo accounts and sample cases in the `.env.local` database (like `npm run seed:demo -- --force`), starts the app on port 3123, signs in as `admin@whistledrop.demo`, and saves desktop and mobile screenshots to `docs/screenshots/`. `npm run screenshots -- --only=dashboard,reports` retakes selected pages. The case code screen is a real submission (it counts toward the 10-per-hour report limit), and that report is deleted afterwards. On the Moderators page only demo accounts are passed to the browser, so no personal address can end up in a screenshot.
+
+### Demo video
+
+```bash
+npx playwright install chromium   # once
+npm run record:demo
+```
+
+This records the walkthrough shown in the home page's Demo section (`scripts/record-demo.ts`). It:
+
+1. seeds the demo accounts and sample cases in the **development** database (`.env.local`) and restores the samples to their seeded state;
+2. builds the app and starts `next start` (with `DEMO_MODE=false`, so the video shows the normal product);
+3. drives Chromium through the whole journey at 1440×900 with Playwright's `recordVideo`, typing and clicking at human speed. A caption bar naming each step and a visible cursor are injected into the page by the script only; neither exists in the app;
+4. trims the time spent waiting on the network (a remote database makes each write take seconds), then converts the recording with the `ffmpeg-static` package (no system ffmpeg needed) into `public/media/demo.mp4` (H.264, 1440 wide, under 15 MB), `public/media/demo-poster.jpg` (a frame from the conversation step) and `docs/demo/demo-preview.gif` (a 13-second loop under 8 MB, because GitHub doesn't play repository MP4 files inline in a README);
+5. writes the chapter timestamps into `lib/demo.ts` (`DEMO_CHAPTERS`), which the chapter buttons use;
+6. deletes the report it created, so a re-run starts clean.
+
+It uses real rate limits (one report, two sign-ins, a few lookups). Commit the regenerated media together with `lib/demo.ts`.
 
 ## Deployment (Vercel)
 
